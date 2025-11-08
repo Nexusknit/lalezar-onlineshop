@@ -19,6 +19,7 @@ class Comment extends Model
         'model_id',
         'model_type',
         'comment',
+        'rating',
         'answer',
         'status',
     ];

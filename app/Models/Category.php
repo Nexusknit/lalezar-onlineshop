@@ -22,6 +22,8 @@ class Category extends Model implements Searchable
         'name',
         'slug',
         'description',
+        'icon',
+        'image_path',
         'order_column',
         'status',
         'is_special',

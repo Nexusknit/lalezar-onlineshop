@@ -16,10 +16,12 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\Home\BlogsController as HomeBlogsController;
+use App\Http\Controllers\Home\BrandController as HomeBrandController;
 use App\Http\Controllers\Home\CategoryController as HomeCategoryController;
 use App\Http\Controllers\Home\NewsController as HomeNewsController;
 use App\Http\Controllers\Home\ProductController as HomeProductController;
 use App\Http\Controllers\Home\SearchController as HomeSearchController;
+use App\Http\Controllers\Home\TeamController as HomeTeamController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\User\FavoriteController as UserFavoriteController;
 use App\Http\Controllers\User\ProfileController as UserProfileController;
@@ -45,6 +47,9 @@ Route::prefix('home')
 
         Route::get('/categories', [HomeCategoryController::class, 'all'])->name('categories.index');
         Route::get('/categories/{category:slug}', [HomeCategoryController::class, 'single'])->name('categories.show');
+
+        Route::get('/brands', [HomeBrandController::class, 'all'])->name('brands.index');
+        Route::get('/team', [HomeTeamController::class, 'all'])->name('team.index');
 
         Route::get('/search', [HomeSearchController::class, 'index'])->name('search');
     });

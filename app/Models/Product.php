@@ -19,12 +19,15 @@ class Product extends Model implements Searchable
 
     protected $fillable = [
         'creator_id',
+        'brand_id',
         'name',
         'slug',
         'sku',
         'description',
         'stock',
+        'sold_count',
         'price',
+        'discount_percent',
         'currency',
         'status',
         'meta',
@@ -32,6 +35,8 @@ class Product extends Model implements Searchable
 
     protected $casts = [
         'price' => 'decimal:2',
+        'discount_percent' => 'integer',
+        'sold_count' => 'integer',
         'meta' => 'array',
     ];
 
@@ -43,6 +48,11 @@ class Product extends Model implements Searchable
     public function items(): HasMany
     {
         return $this->hasMany(Item::class);
+    }
+
+    public function brand(): BelongsTo
+    {
+        return $this->belongsTo(Brand::class);
     }
 
     public function tags(): MorphToMany

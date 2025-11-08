@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Home;
 
 use App\Http\Controllers\Controller;
 use App\Models\Category;
+use App\Support\Loaders\CategoryLoader;
 use Illuminate\Http\JsonResponse;
 
 class CategoryController extends Controller
@@ -12,7 +13,9 @@ class CategoryController extends Controller
     {
         $categories = Category::query()
             ->with([
-                'children:id,parent_id,name,slug,description,order_column,status,is_special',
+                'parent:id,name,slug',
+                'children:id,parent_id,name,slug',
+                'products:id',
             ])
             ->where('status', 'active')
             ->orderBy('order_column')
@@ -23,12 +26,15 @@ class CategoryController extends Controller
                 'name',
                 'slug',
                 'description',
+                'icon',
+                'image_path',
                 'order_column',
                 'status',
                 'is_special',
                 'created_at',
                 'updated_at',
-            ]);
+            ])
+            ->map(fn (Category $category) => CategoryLoader::make($category));
 
         return response()->json($categories);
     }
@@ -39,14 +45,10 @@ class CategoryController extends Controller
 
         $category->load([
             'parent:id,name,slug',
-            'children:id,parent_id,name,slug,description,order_column,status,is_special',
+            'children:id,parent_id,name,slug',
             'products' => static function ($query): void {
-                $query->select(['products.id', 'products.creator_id', 'products.name', 'products.slug', 'products.price', 'products.currency', 'products.status'])
-                    ->whereIn('products.status', ['active', 'special'])
-                    ->with([
-                        'galleries:id,creator_id,model_id,model_type,disk,path,title,alt,created_at',
-                    ])
-                    ->latest();
+                $query->select(['products.id'])
+                    ->whereIn('products.status', ['active', 'special']);
             },
             'blogs' => static function ($query): void {
                 $query->select(['blogs.id', 'blogs.creator_id', 'blogs.title', 'blogs.slug', 'blogs.status', 'blogs.published_at'])
@@ -68,6 +70,10 @@ class CategoryController extends Controller
             },
         ]);
 
-        return response()->json($category);
+        return response()->json([
+            'category' => CategoryLoader::make($category),
+            'blogs' => $category->blogs,
+            'news' => $category->news,
+        ]);
     }
 }

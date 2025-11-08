@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Home;
 
 use App\Http\Controllers\Controller;
 use App\Models\Blog;
+use App\Support\Loaders\BlogLoader;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -21,12 +22,6 @@ class BlogsController extends Controller
                 'categories:id,name,slug',
                 'tags:id,name,slug',
                 'galleries:id,creator_id,model_id,model_type,disk,path,title,alt,created_at',
-            ])
-            ->withCount([
-                'likes',
-                'comments as approved_comments_count' => static function ($query): void {
-                    $query->whereIn('status', ['published', 'answered']);
-                },
             ])
             ->whereIn('status', ['active', 'special'])
             ->where(static function ($query): void {
@@ -54,7 +49,8 @@ class BlogsController extends Controller
                 });
             })
             ->latest('published_at')
-            ->paginate($perPage);
+            ->paginate($perPage)
+            ->through(fn (Blog $blog) => BlogLoader::make($blog));
 
         return response()->json($blogs);
     }
@@ -74,22 +70,8 @@ class BlogsController extends Controller
             'categories:id,name,slug',
             'tags:id,name,slug',
             'galleries:id,creator_id,model_id,model_type,disk,path,title,alt,created_at',
-            'likes:id,creator_id,model_id,model_type,created_at',
-            'comments' => static function ($query): void {
-                $query->whereIn('status', ['published', 'answered'])
-                    ->with(['user:id,name'])
-                    ->latest();
-            },
-        ])->loadCount([
-            'likes',
-            'comments as approved_comments_count' => static function ($query): void {
-                $query->whereIn('status', ['published', 'answered']);
-            },
         ]);
 
-        $blog->setRelation('likes', $blog->likes->take(20));
-        $blog->setRelation('comments', $blog->comments->take(20));
-
-        return response()->json($blog);
+        return response()->json(BlogLoader::make($blog));
     }
 }

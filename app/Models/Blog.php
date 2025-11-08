@@ -19,6 +19,7 @@ class Blog extends Model implements Searchable
     protected $fillable = [
         'creator_id',
         'title',
+        'cover_image',
         'slug',
         'excerpt',
         'body',
