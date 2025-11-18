@@ -12,7 +12,11 @@ class ProfileController extends Controller
 {
     public function show(Request $request): JsonResponse
     {
-        $user = $request->user()->load(['roles:id,name,slug', 'permissions:id,name,slug']);
+        $user = $request->user()->load([
+            'roles:id,name,slug',
+            'roles.permissions:id,name,slug',
+            'permissions:id,name,slug',
+        ]);
 
         return response()->json($user);
     }
