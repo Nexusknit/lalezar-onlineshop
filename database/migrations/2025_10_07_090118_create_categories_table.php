@@ -17,7 +17,8 @@ return new class extends Migration
             $table->foreignId('parent_id')->nullable()->constrained('categories')->nullOnDelete();
             $table->string('name');
             $table->string('slug')->unique();
-            $table->text('description')->nullable();
+            $table->longText('content')->nullable();
+            $table->string('summary')->nullable();
             $table->unsignedInteger('order_column')->default(0);
             $table->string('status')->default('inactive');
             $table->boolean('is_special')->default(false);

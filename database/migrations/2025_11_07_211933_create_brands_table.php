@@ -16,7 +16,8 @@ return new class extends Migration
             $table->foreignId('creator_id')->nullable()->constrained('users')->nullOnDelete();
             $table->string('name');
             $table->string('slug')->unique();
-            $table->text('description')->nullable();
+            $table->longText('content')->nullable();
+            $table->string('summary')->nullable();
             $table->string('email')->nullable();
             $table->string('website')->nullable();
             $table->string('location')->nullable();

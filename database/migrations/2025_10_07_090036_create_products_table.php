@@ -17,7 +17,8 @@ return new class extends Migration
             $table->string('name');
             $table->string('slug')->unique();
             $table->string('sku')->unique()->nullable();
-            $table->text('description')->nullable();
+            $table->longText('content')->nullable();
+            $table->string('summary')->nullable();
             $table->unsignedInteger('stock')->default(0);
             $table->decimal('price', 12, 2)->default(0);
             $table->string('currency', 3)->default('IRR');
