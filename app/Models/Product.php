@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
@@ -21,7 +20,6 @@ class Product extends Model implements Searchable
 
     protected $fillable = [
         'creator_id',
-        'brand_id',
         'name',
         'slug',
         'sku',
@@ -54,9 +52,9 @@ class Product extends Model implements Searchable
         return $this->hasMany(Item::class);
     }
 
-    public function brand(): BelongsTo
+    public function brands(): MorphToMany
     {
-        return $this->belongsTo(Brand::class);
+        return $this->morphToMany(Brand::class, 'brandable');
     }
 
     public function tags(): MorphToMany

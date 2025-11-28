@@ -304,7 +304,6 @@ class ContentSeeder extends Seeder
                 ['slug' => $slug],
                 [
                     'creator_id' => $creator->id,
-                    'brand_id' => $brandId,
                     'name' => $definition['name'],
                     'sku' => $definition['sku'],
                     'summary' => $definition['summary'] ?? $definition['description'] ?? null,
@@ -318,6 +317,8 @@ class ContentSeeder extends Seeder
                     'meta' => $definition['meta'] ?? [],
                 ],
             );
+
+            $product->brands()->sync($brandId ? [$brandId] : []);
 
             $categoryIds = collect($definition['categories'] ?? [])
                 ->map(fn (string $categorySlug) => $categories->get($categorySlug)?->id)

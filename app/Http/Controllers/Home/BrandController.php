@@ -16,7 +16,7 @@ class BrandController extends Controller
 
         $brands = Brand::query()
             ->with([
-                'products:id,brand_id',
+                'products:id',
             ])
             ->when($status, static function ($query) use ($status) {
                 $query->where('status', $status);

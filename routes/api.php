@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\BlogController;
+use App\Http\Controllers\Admin\BrandController as AdminBrandController;
 use App\Http\Controllers\Admin\CategoryController;
 use App\Http\Controllers\Admin\CommentController;
 use App\Http\Controllers\Admin\InvoiceController;
@@ -92,6 +93,13 @@ Route::prefix('admin')
         Route::delete('/blogs/{blog}', [BlogController::class, 'delete'])->name('blogs.delete');
         Route::post('/blogs/{blog}/activate', [BlogController::class, 'activate'])->name('blogs.activate');
         Route::post('/blogs/{blog}/specialize', [BlogController::class, 'specialize'])->name('blogs.specialize');
+
+        // Brands
+        Route::get('/brands', [AdminBrandController::class, 'all'])->name('brands.index');
+        Route::post('/brands', [AdminBrandController::class, 'store'])->name('brands.store');
+        Route::match(['put', 'patch'], '/brands/{brand}', [AdminBrandController::class, 'update'])->name('brands.update');
+        Route::delete('/brands/{brand}', [AdminBrandController::class, 'delete'])->name('brands.delete');
+        Route::post('/brands/{brand}/activate', [AdminBrandController::class, 'activate'])->name('brands.activate');
 
         // News
         Route::get('/news', [NewsController::class, 'all'])->name('news.index');
