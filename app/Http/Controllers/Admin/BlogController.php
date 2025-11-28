@@ -43,7 +43,7 @@ class BlogController extends Controller
         $perPage = $perPage > 0 ? min($perPage, 100) : 15;
 
         $blogs = Blog::query()
-            ->with(['creator', 'categories', 'tags', 'images'])
+            ->with(['creator', 'categories', 'tags', 'galleries'])
             ->when($request->filled('status'), static function ($query) use ($request) {
                 $query->where('status', $request->string('status'));
             })
