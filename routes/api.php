@@ -15,6 +15,7 @@ use App\Http\Controllers\Admin\TicketController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CartController;
+use App\Http\Controllers\UploadController;
 use App\Http\Controllers\Home\BlogsController as HomeBlogsController;
 use App\Http\Controllers\Home\BrandController as HomeBrandController;
 use App\Http\Controllers\Home\CategoryController as HomeCategoryController;
@@ -81,6 +82,8 @@ Route::prefix('admin')
         Route::match(['put', 'patch'], '/users/{user}', [UserController::class, 'update'])->name('users.update');
         Route::post('/users/{user}/accessibility', [UserController::class, 'accessibility'])->name('users.accessibility');
         Route::post('/users/{user}/impersonate', [UserController::class, 'loginAsUser'])->name('users.impersonate');
+
+        Route::post('/uploads', [UploadController::class, 'store'])->name('uploads.store');
 
         // Blogs
         Route::get('/blogs', [BlogController::class, 'all'])->name('blogs.index');
