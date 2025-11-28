@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Support\Str;
 use Spatie\Searchable\Searchable;
 use Spatie\Searchable\SearchResult;
 
@@ -21,6 +23,8 @@ class Category extends Model implements Searchable
         'parent_id',
         'name',
         'slug',
+        'summary',
+        'content',
         'description',
         'icon',
         'image_path',
@@ -72,6 +76,21 @@ class Category extends Model implements Searchable
     public function tickets(): MorphToMany
     {
         return $this->morphedByMany(Ticket::class, 'categorizable');
+    }
+
+    /**
+     * Keep legacy description access while storing data in the new summary/content columns.
+     */
+    protected function description(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->content ?? $this->summary,
+            set: function ($value): void {
+                $this->attributes['content'] = $value;
+                $this->attributes['summary'] = $this->attributes['summary']
+                    ?? ($value ? Str::limit((string) $value, 160) : null);
+            },
+        );
     }
 
     public function getSearchResult(): SearchResult

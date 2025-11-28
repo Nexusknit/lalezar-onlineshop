@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Support\Str;
 
 class Brand extends Model
 {
@@ -17,6 +19,8 @@ class Brand extends Model
         'creator_id',
         'name',
         'slug',
+        'summary',
+        'content',
         'description',
         'email',
         'website',
@@ -38,5 +42,17 @@ class Brand extends Model
     public function products(): HasMany
     {
         return $this->hasMany(Product::class);
+    }
+
+    protected function description(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->content ?? $this->summary,
+            set: function ($value): void {
+                $this->attributes['content'] = $value;
+                $this->attributes['summary'] = $this->attributes['summary']
+                    ?? ($value ? Str::limit((string) $value, 160) : null);
+            },
+        );
     }
 }

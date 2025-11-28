@@ -48,7 +48,8 @@ class ProductController extends Controller
                 $query->where(static function ($query) use ($term): void {
                     $query->where('name', 'like', "%{$term}%")
                         ->orWhere('slug', 'like', "%{$term}%")
-                        ->orWhere('description', 'like', "%{$term}%");
+                        ->orWhere('summary', 'like', "%{$term}%")
+                        ->orWhere('content', 'like', "%{$term}%");
                 });
             })
             ->latest()

@@ -101,6 +101,8 @@ class ContentSeeder extends Seeder
     private function createCategory(User $creator, array $data, ?int $parentId = null): Category
     {
         $slug = $data['slug'] ?? Str::slug($data['name']);
+        $summary = $data['summary'] ?? $data['description'] ?? null;
+        $content = $data['content'] ?? $data['description'] ?? null;
 
         return Category::query()->updateOrCreate(
             ['slug' => $slug],
@@ -108,7 +110,8 @@ class ContentSeeder extends Seeder
                 'creator_id' => $creator->id,
                 'parent_id' => $parentId,
                 'name' => $data['name'],
-                'description' => $data['description'] ?? null,
+                'summary' => $summary,
+                'content' => $content,
                 'icon' => $data['icon'] ?? null,
                 'image_path' => $data['image_path'] ?? null,
                 'order_column' => $data['order_column'] ?? 0,
@@ -186,7 +189,8 @@ class ContentSeeder extends Seeder
                 [
                     'creator_id' => $creator->id,
                     'name' => $definition['name'],
-                    'description' => $definition['description'] ?? null,
+                    'summary' => $definition['summary'] ?? $definition['description'] ?? null,
+                    'content' => $definition['content'] ?? $definition['description'] ?? null,
                     'email' => $definition['email'] ?? null,
                     'website' => $definition['website'] ?? null,
                     'location' => $definition['location'] ?? null,
@@ -303,7 +307,8 @@ class ContentSeeder extends Seeder
                     'brand_id' => $brandId,
                     'name' => $definition['name'],
                     'sku' => $definition['sku'],
-                    'description' => $definition['description'] ?? null,
+                    'summary' => $definition['summary'] ?? $definition['description'] ?? null,
+                    'content' => $definition['content'] ?? $definition['description'] ?? null,
                     'stock' => $definition['stock'] ?? 0,
                     'sold_count' => $definition['sold_count'] ?? 0,
                     'price' => $definition['price'] ?? 0,
@@ -384,8 +389,8 @@ class ContentSeeder extends Seeder
                     'creator_id' => $creator->id,
                     'title' => $definition['title'],
                     'cover_image' => $definition['cover_image'] ?? null,
-                    'excerpt' => $definition['excerpt'] ?? null,
-                    'body' => $definition['body'] ?? null,
+                    'summary' => $definition['summary'] ?? $definition['excerpt'] ?? null,
+                    'content' => $definition['content'] ?? $definition['body'] ?? null,
                     'status' => $definition['status'] ?? 'draft',
                     'published_at' => $definition['published_at'] ?? now()->subDays($index + 1),
                     'meta' => $definition['meta'] ?? [],

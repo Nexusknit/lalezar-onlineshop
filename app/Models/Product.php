@@ -9,6 +9,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Support\Str;
 use Spatie\Searchable\Searchable;
 use Spatie\Searchable\SearchResult;
 
@@ -23,6 +25,8 @@ class Product extends Model implements Searchable
         'name',
         'slug',
         'sku',
+        'summary',
+        'content',
         'description',
         'stock',
         'sold_count',
@@ -78,6 +82,18 @@ class Product extends Model implements Searchable
     public function comments(): MorphMany
     {
         return $this->morphMany(Comment::class, 'model');
+    }
+
+    protected function description(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->content ?? $this->summary,
+            set: function ($value): void {
+                $this->attributes['content'] = $value;
+                $this->attributes['summary'] = $this->attributes['summary']
+                    ?? ($value ? Str::limit((string) $value, 160) : null);
+            },
+        );
     }
 
     public function galleries(): MorphMany

@@ -44,8 +44,8 @@ class BlogsController extends Controller
                 $term = $request->string('q');
                 $query->where(static function ($query) use ($term): void {
                     $query->where('title', 'like', "%{$term}%")
-                        ->orWhere('excerpt', 'like', "%{$term}%")
-                        ->orWhere('body', 'like', "%{$term}%");
+                        ->orWhere('summary', 'like', "%{$term}%")
+                        ->orWhere('content', 'like', "%{$term}%");
                 });
             })
             ->latest('published_at')

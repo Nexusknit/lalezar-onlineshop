@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Support\Str;
 use Spatie\Searchable\Searchable;
 use Spatie\Searchable\SearchResult;
 
@@ -21,6 +23,8 @@ class Blog extends Model implements Searchable
         'title',
         'cover_image',
         'slug',
+        'summary',
+        'content',
         'excerpt',
         'body',
         'status',
@@ -61,6 +65,26 @@ class Blog extends Model implements Searchable
     public function comments(): MorphMany
     {
         return $this->morphMany(Comment::class, 'model');
+    }
+
+    protected function excerpt(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->summary,
+            set: fn ($value) => $this->attributes['summary'] = $value ?? null,
+        );
+    }
+
+    protected function body(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => $this->content,
+            set: function ($value): void {
+                $this->attributes['content'] = $value;
+                $this->attributes['summary'] = $this->attributes['summary']
+                    ?? ($value ? Str::limit(strip_tags((string) $value), 200) : null);
+            },
+        );
     }
 
     public function galleries(): MorphMany

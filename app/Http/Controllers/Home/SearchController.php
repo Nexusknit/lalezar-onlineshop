@@ -31,7 +31,8 @@ class SearchController extends Controller
             ->registerModel(Product::class, static function (ModelSearchAspect $aspect): void {
                 $aspect->addSearchableAttribute('name')
                     ->addSearchableAttribute('slug')
-                    ->addSearchableAttribute('description')
+                    ->addSearchableAttribute('summary')
+                    ->addSearchableAttribute('content')
                     ->where(static function ($query): void {
                         $query->whereIn('status', ['active', 'special']);
                     });
@@ -39,8 +40,8 @@ class SearchController extends Controller
             ->registerModel(Blog::class, static function (ModelSearchAspect $aspect): void {
                 $aspect->addSearchableAttribute('title')
                     ->addSearchableAttribute('slug')
-                    ->addSearchableAttribute('excerpt')
-                    ->addSearchableAttribute('body')
+                    ->addSearchableAttribute('summary')
+                    ->addSearchableAttribute('content')
                     ->where(static function ($query): void {
                         $query->whereIn('status', ['active', 'special'])
                             ->where(static function ($query): void {
@@ -65,7 +66,8 @@ class SearchController extends Controller
             ->registerModel(Category::class, static function (ModelSearchAspect $aspect): void {
                 $aspect->addSearchableAttribute('name')
                     ->addSearchableAttribute('slug')
-                    ->addSearchableAttribute('description')
+                    ->addSearchableAttribute('summary')
+                    ->addSearchableAttribute('content')
                     ->where('status', 'active');
             })
             ->limitAspectResults(15);
