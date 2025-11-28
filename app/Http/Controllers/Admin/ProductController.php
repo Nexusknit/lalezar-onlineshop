@@ -42,7 +42,7 @@ class ProductController extends Controller
         $perPage = $perPage > 0 ? min($perPage, 100) : 15;
 
         $products = Product::query()
-            ->with(['creator', 'categories', 'tags'])
+            ->with(['creator', 'categories', 'tags', 'images'])
             ->when($request->filled('status'), static function ($query) use ($request) {
                 $query->where('status', $request->string('status'));
             })
