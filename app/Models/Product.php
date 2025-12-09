@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Casts\Attribute as CastsAttribute;
 use Illuminate\Support\Str;
 use Spatie\Searchable\Searchable;
 use Spatie\Searchable\SearchResult;
@@ -83,9 +83,9 @@ class Product extends Model implements Searchable
         return $this->morphMany(Comment::class, 'model');
     }
 
-    protected function description(): Attribute
+    protected function description(): CastsAttribute
     {
-        return Attribute::make(
+        return CastsAttribute::make(
             get: fn () => $this->content ?? $this->summary,
             set: function ($value): void {
                 $this->attributes['content'] = $value;
