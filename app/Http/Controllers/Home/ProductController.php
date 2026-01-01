@@ -66,7 +66,7 @@ class ProductController extends Controller
         abort_if(! in_array($product->status, $allowed, true), 404, 'Product is not available.');
 
         $product->load([
-            'brand:id,name,slug',
+            'brands:id,name,slug',
             'categories:id,name,slug,parent_id',
             'categories.parent:id,name,slug',
             'tags:id,name,slug',
