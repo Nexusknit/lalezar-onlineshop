@@ -17,7 +17,7 @@ class ProductController extends Controller
 
         $products = Product::query()
             ->with([
-                'brand:id,name,slug',
+                'brands:id,name,slug',
                 'categories:id,name,slug,parent_id',
                 'categories.parent:id,name,slug',
                 'tags:id,name,slug',
