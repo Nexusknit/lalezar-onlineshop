@@ -17,6 +17,7 @@ class CategoryController extends Controller
         $this->middleware('permission:category.all')->only('all');
         $this->middleware('permission:category.store')->only('store');
         $this->middleware('permission:category.update')->only('update');
+        $this->middleware('permission:category.delete')->only('delete');
         $this->middleware('permission:category.activate')->only('activate');
         $this->middleware('permission:category.specialize')->only('specialize');
     }
@@ -140,6 +141,15 @@ class CategoryController extends Controller
         $category->fill($data)->save();
 
         return response()->json($category->fresh()->load(['parent', 'children']));
+    }
+
+    public function delete(Category $category): JsonResponse
+    {
+        $category->delete();
+
+        return response()->json([
+            'message' => 'Category deleted successfully.',
+        ]);
     }
 
     #[OA\Post(

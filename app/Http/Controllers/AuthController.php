@@ -160,6 +160,10 @@ class AuthController extends Controller
 
         $user->save();
 
+        if ($user->accessibility === false) {
+            abort(403, 'Your account access has been disabled.');
+        }
+
         Cache::forget($this->challengeKey($data['phone']));
 
         $token = $user->createToken('auth-token')->plainTextToken;

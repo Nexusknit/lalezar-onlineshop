@@ -11,6 +11,22 @@ class BlogLoader
 
     public static function make(Blog $blog): array
     {
+        $comments = $blog->relationLoaded('comments')
+            ? $blog->comments
+                ->map(static function ($comment) {
+                    return [
+                        'id' => $comment->id,
+                        'name' => $comment->user?->name ?? 'User',
+                        'comment' => $comment->comment,
+                        'answer' => $comment->answer,
+                        'rating' => $comment->rating,
+                        'date' => optional($comment->created_at)->toDateString(),
+                    ];
+                })
+                ->values()
+                ->all()
+            : [];
+
         return [
             'id' => $blog->id,
             'img' => $blog->cover_image
@@ -25,6 +41,8 @@ class BlogLoader
             'page' => data_get($blog->meta, 'page', 'default'),
             'slug' => $blog->slug,
             'status' => $blog->status,
+            'comments' => $comments,
+            'comments_count' => count($comments),
         ];
     }
 }

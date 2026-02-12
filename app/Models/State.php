@@ -14,6 +14,7 @@ class State extends Model
         'name',
         'slug',
         'code',
+        'status',
     ];
 
     public function cities(): HasMany

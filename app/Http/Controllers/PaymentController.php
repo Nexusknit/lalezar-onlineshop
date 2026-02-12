@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\Address;
+use App\Models\CouponUsage;
 use App\Models\Invoice;
 use App\Models\Item;
 use App\Models\Product;
+use App\Support\Coupons\CouponService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -30,6 +32,7 @@ class PaymentController extends Controller
                 required: ['address_id', 'items'],
                 properties: [
                     new OA\Property(property: 'address_id', type: 'integer', example: 3),
+                    new OA\Property(property: 'coupon_code', type: 'string', nullable: true, example: 'WELCOME10'),
                     new OA\Property(
                         property: 'items',
                         type: 'array',
@@ -60,6 +63,7 @@ class PaymentController extends Controller
     {
         $data = $request->validate([
             'address_id' => ['required', 'integer'],
+            'coupon_code' => ['nullable', 'string', 'max:64'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'integer', 'distinct'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
@@ -104,21 +108,47 @@ class PaymentController extends Controller
         });
 
         $subtotal = $itemsPayload->sum('total');
+        $couponCode = isset($data['coupon_code']) ? trim((string) $data['coupon_code']) : null;
 
         /** @var Invoice $invoice */
-        $invoice = DB::transaction(function () use ($user, $address, $currency, $itemsPayload, $subtotal) {
+        $invoice = DB::transaction(function () use ($user, $address, $currency, $itemsPayload, $subtotal, $couponCode) {
+            $coupon = null;
+            $discount = 0.0;
+
+            if ($couponCode) {
+                $coupon = CouponService::resolveValidCoupon(
+                    $couponCode,
+                    (float) $subtotal,
+                    $currency,
+                    $user,
+                    true
+                );
+                $discount = $coupon->calculateDiscount((float) $subtotal);
+            }
+
+            $total = round(max(0, (float) $subtotal - $discount), 2);
+
             $invoice = Invoice::query()->create([
                 'user_id' => $user->id,
                 'address_id' => $address->id,
+                'coupon_id' => $coupon?->id,
                 'number' => $this->generateInvoiceNumber(),
                 'status' => 'pending',
                 'currency' => $currency,
                 'subtotal' => $subtotal,
                 'tax' => 0,
-                'discount' => 0,
-                'total' => $subtotal,
+                'discount' => $discount,
+                'total' => $total,
                 'issued_at' => now(),
-                'meta' => null,
+                'meta' => $coupon ? [
+                    'coupon' => [
+                        'id' => $coupon->id,
+                        'code' => $coupon->code,
+                        'discount_type' => $coupon->discount_type,
+                        'discount_value' => $coupon->discount_value,
+                        'calculated_discount' => $discount,
+                    ],
+                ] : null,
             ]);
 
             $itemsPayload->each(function (array $payload) use ($invoice): void {
@@ -140,9 +170,22 @@ class PaymentController extends Controller
                 ]);
             });
 
+            if ($coupon) {
+                $coupon->increment('used_count');
+
+                CouponUsage::query()->create([
+                    'coupon_id' => $coupon->id,
+                    'user_id' => $user->id,
+                    'invoice_id' => $invoice->id,
+                    'discount_amount' => $discount,
+                    'used_at' => now(),
+                ]);
+            }
+
             return $invoice->fresh()->load([
                 'items',
                 'address.city.state',
+                'coupon',
             ]);
         });
 

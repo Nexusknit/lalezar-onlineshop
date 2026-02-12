@@ -94,13 +94,17 @@ class UserController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
+            'phone' => ['nullable', 'string', 'max:20', 'unique:users,phone'],
             'password' => ['required', 'string', 'min:8'],
+            'accessibility' => ['sometimes', 'boolean'],
         ]);
 
         $user = User::query()->create([
             'name' => $data['name'],
             'email' => $data['email'],
+            'phone' => $data['phone'] ?? null,
             'password' => Hash::make($data['password']),
+            'accessibility' => $data['accessibility'] ?? true,
         ]);
 
         return response()->json($user->fresh()->load(['roles', 'permissions']), 201);
@@ -142,7 +146,15 @@ class UserController extends Controller
                 'max:255',
                 Rule::unique('users', 'email')->ignore($user->id),
             ],
+            'phone' => [
+                'sometimes',
+                'nullable',
+                'string',
+                'max:20',
+                Rule::unique('users', 'phone')->ignore($user->id),
+            ],
             'password' => ['nullable', 'string', 'min:8'],
+            'accessibility' => ['sometimes', 'boolean'],
         ]);
 
         if (array_key_exists('password', $data) && $data['password']) {
@@ -187,7 +199,12 @@ class UserController extends Controller
             'roles.*' => ['integer', Rule::exists('roles', 'id')],
             'permissions' => ['sometimes', 'array'],
             'permissions.*' => ['integer', Rule::exists('permissions', 'id')],
+            'accessibility' => ['sometimes', 'boolean'],
         ]);
+
+        if (array_key_exists('accessibility', $data)) {
+            $user->update(['accessibility' => (bool) $data['accessibility']]);
+        }
 
         if (array_key_exists('roles', $data)) {
             $user->roles()->sync($data['roles']);

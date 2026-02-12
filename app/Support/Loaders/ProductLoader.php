@@ -28,7 +28,7 @@ class ProductLoader
             'discount_percentage' => $product->discount_percent,
             'quantity' => $product->stock,
             'related_images' => self::relatedImages($product),
-            'brand' => $product->brand?->name,
+            'brand' => $product->brands->first()?->name,
             'description' => $product->description,
             'additionalInformation' => self::additionalInformation($product),
             'tags' => $product->tags->pluck('name')->values()->all(),

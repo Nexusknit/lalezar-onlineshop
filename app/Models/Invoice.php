@@ -18,6 +18,7 @@ class Invoice extends Model
     protected $fillable = [
         'user_id',
         'address_id',
+        'coupon_id',
         'number',
         'status',
         'currency',
@@ -38,6 +39,7 @@ class Invoice extends Model
         'issued_at' => 'datetime',
         'due_at' => 'datetime',
         'meta' => 'array',
+        'coupon_id' => 'integer',
     ];
 
     public function user(): BelongsTo
@@ -48,6 +50,11 @@ class Invoice extends Model
     public function address(): BelongsTo
     {
         return $this->belongsTo(Address::class);
+    }
+
+    public function coupon(): BelongsTo
+    {
+        return $this->belongsTo(Coupon::class);
     }
 
     public function items(): HasMany

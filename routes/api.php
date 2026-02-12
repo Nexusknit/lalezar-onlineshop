@@ -16,16 +16,20 @@ use App\Http\Controllers\Admin\TicketController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CartController;
+use App\Http\Controllers\CouponController;
 use App\Http\Controllers\UploadController;
 use App\Http\Controllers\Home\BlogsController as HomeBlogsController;
 use App\Http\Controllers\Home\BrandController as HomeBrandController;
 use App\Http\Controllers\Home\CategoryController as HomeCategoryController;
+use App\Http\Controllers\Home\LocationController as HomeLocationController;
 use App\Http\Controllers\Home\NewsController as HomeNewsController;
 use App\Http\Controllers\Home\ProductController as HomeProductController;
 use App\Http\Controllers\Home\SearchController as HomeSearchController;
 use App\Http\Controllers\Home\TeamController as HomeTeamController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\User\FavoriteController as UserFavoriteController;
+use App\Http\Controllers\User\AddressController as UserAddressController;
+use App\Http\Controllers\User\CommentController as UserCommentController;
 use App\Http\Controllers\User\ProfileController as UserProfileController;
 use App\Http\Controllers\User\TicketController as UserTicketController;
 use Illuminate\Support\Facades\Route;
@@ -34,6 +38,7 @@ Route::post('/auth/login', [AuthController::class, 'login'])->name('auth.login')
 Route::post('/auth/verify', [AuthController::class, 'verify'])->name('auth.verify');
 
 Route::post('/cart/check', [CartController::class, 'check'])->name('cart.check');
+Route::post('/cart/coupon', [CouponController::class, 'preview'])->name('cart.coupon');
 
 Route::prefix('home')
     ->as('home.')
@@ -49,6 +54,8 @@ Route::prefix('home')
 
         Route::get('/categories', [HomeCategoryController::class, 'all'])->name('categories.index');
         Route::get('/categories/{category:slug}', [HomeCategoryController::class, 'single'])->name('categories.show');
+        Route::get('/states', [HomeLocationController::class, 'states'])->name('states.index');
+        Route::get('/cities', [HomeLocationController::class, 'cities'])->name('cities.index');
 
         Route::get('/brands', [HomeBrandController::class, 'all'])->name('brands.index');
         Route::get('/team', [HomeTeamController::class, 'all'])->name('team.index');
@@ -69,6 +76,16 @@ Route::prefix('user')
         Route::post('/tickets/{ticket}/messages', [UserTicketController::class, 'sendMessage'])->name('tickets.messages.store');
 
         Route::get('/favorites', [UserFavoriteController::class, 'index'])->name('favorites.index');
+        Route::post('/favorites', [UserFavoriteController::class, 'store'])->name('favorites.store');
+        Route::delete('/favorites/{product}', [UserFavoriteController::class, 'destroy'])->name('favorites.destroy');
+
+        Route::post('/comments', [UserCommentController::class, 'store'])->name('comments.store');
+
+        Route::get('/addresses', [UserAddressController::class, 'index'])->name('addresses.index');
+        Route::post('/addresses', [UserAddressController::class, 'store'])->name('addresses.store');
+        Route::get('/addresses/{address}', [UserAddressController::class, 'show'])->name('addresses.show');
+        Route::match(['put', 'patch'], '/addresses/{address}', [UserAddressController::class, 'update'])->name('addresses.update');
+        Route::delete('/addresses/{address}', [UserAddressController::class, 'destroy'])->name('addresses.destroy');
 
         Route::post('/checkout', [PaymentController::class, 'checkout'])->name('checkout');
     });
@@ -111,6 +128,7 @@ Route::prefix('admin')
 
         // Products
         Route::get('/products', [ProductController::class, 'all'])->name('products.index');
+        Route::get('/products/{product}', [ProductController::class, 'show'])->name('products.show');
         Route::post('/products', [ProductController::class, 'store'])->name('products.store');
         Route::match(['put', 'patch'], '/products/{product}', [ProductController::class, 'update'])->name('products.update');
         Route::post('/products/{product}/activate', [ProductController::class, 'activate'])->name('products.activate');
@@ -134,6 +152,7 @@ Route::prefix('admin')
         Route::get('/categories', [CategoryController::class, 'all'])->name('categories.index');
         Route::post('/categories', [CategoryController::class, 'store'])->name('categories.store');
         Route::match(['put', 'patch'], '/categories/{category}', [CategoryController::class, 'update'])->name('categories.update');
+        Route::delete('/categories/{category}', [CategoryController::class, 'delete'])->name('categories.delete');
         Route::post('/categories/{category}/activate', [CategoryController::class, 'activate'])->name('categories.activate');
         Route::post('/categories/{category}/specialize', [CategoryController::class, 'specialize'])->name('categories.specialize');
 

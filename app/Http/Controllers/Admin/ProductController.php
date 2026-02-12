@@ -15,6 +15,7 @@ class ProductController extends Controller
     public function __construct()
     {
         $this->middleware('permission:product.all')->only('all');
+        $this->middleware('permission:product.all')->only('show');
         $this->middleware('permission:product.store')->only('store');
         $this->middleware('permission:product.update')->only('update');
         $this->middleware('permission:product.activate')->only('activate');
@@ -50,6 +51,13 @@ class ProductController extends Controller
             ->paginate($perPage);
 
         return response()->json($products);
+    }
+
+    public function show(Product $product): JsonResponse
+    {
+        $product->load(['creator', 'categories', 'tags', 'galleries', 'attributes', 'brands']);
+
+        return response()->json($product);
     }
 
     #[OA\Post(

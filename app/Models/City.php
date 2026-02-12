@@ -17,6 +17,7 @@ class City extends Model
         'slug',
         'code',
         'is_capital',
+        'status',
     ];
 
     protected $casts = [

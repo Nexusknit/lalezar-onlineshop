@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\Blog;
 use App\Models\Brand;
 use App\Models\Category;
+use App\Models\Coupon;
 use App\Models\Product;
 use App\Models\TeamMember;
 use App\Models\User;
@@ -27,10 +28,68 @@ class ContentSeeder extends Seeder
 
         $categories = $this->seedCategories($creator);
         $brands = $this->seedBrands($creator);
+        $this->seedCoupons();
 
         $this->seedProducts($creator, $brands, $categories);
         $this->seedBlogs($creator, $categories);
         $this->seedTeamMembers($creator);
+    }
+
+    private function seedCoupons(): void
+    {
+        $definitions = [
+            [
+                'code' => 'WELCOME10',
+                'title' => 'Welcome 10%',
+                'description' => '10% off for regular purchases.',
+                'discount_type' => 'percent',
+                'discount_value' => 10,
+                'min_subtotal' => 500000,
+                'max_discount' => 800000,
+                'currency' => 'IRR',
+                'starts_at' => now()->subMonth(),
+                'ends_at' => now()->addYear(),
+                'max_uses' => 5000,
+                'max_uses_per_user' => 3,
+                'status' => 'active',
+            ],
+            [
+                'code' => 'SAVE250K',
+                'title' => 'Save 250K',
+                'description' => 'Fixed discount for high-value carts.',
+                'discount_type' => 'fixed',
+                'discount_value' => 250000,
+                'min_subtotal' => 2000000,
+                'max_discount' => null,
+                'currency' => 'IRR',
+                'starts_at' => now()->subMonth(),
+                'ends_at' => now()->addYear(),
+                'max_uses' => null,
+                'max_uses_per_user' => 1,
+                'status' => 'active',
+            ],
+        ];
+
+        foreach ($definitions as $definition) {
+            Coupon::query()->updateOrCreate(
+                ['code' => $definition['code']],
+                [
+                    'title' => $definition['title'],
+                    'description' => $definition['description'],
+                    'discount_type' => $definition['discount_type'],
+                    'discount_value' => $definition['discount_value'],
+                    'min_subtotal' => $definition['min_subtotal'],
+                    'max_discount' => $definition['max_discount'],
+                    'currency' => $definition['currency'],
+                    'starts_at' => $definition['starts_at'],
+                    'ends_at' => $definition['ends_at'],
+                    'max_uses' => $definition['max_uses'],
+                    'max_uses_per_user' => $definition['max_uses_per_user'],
+                    'status' => $definition['status'],
+                    'meta' => null,
+                ],
+            );
+        }
     }
 
     /**

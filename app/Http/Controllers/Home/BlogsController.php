@@ -70,7 +70,14 @@ class BlogsController extends Controller
             'categories:id,name,slug',
             'tags:id,name,slug',
             'galleries:id,creator_id,model_id,model_type,disk,path,title,alt,created_at',
+            'comments' => static function ($query): void {
+                $query->whereIn('status', ['published', 'answered'])
+                    ->with(['user:id,name'])
+                    ->latest();
+            },
         ]);
+
+        $blog->setRelation('comments', $blog->comments->take(20));
 
         return response()->json(BlogLoader::make($blog));
     }
