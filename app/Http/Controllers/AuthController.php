@@ -8,7 +8,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use OpenApi\Attributes as OA;
 
@@ -59,16 +58,11 @@ class AuthController extends Controller
 
         Cache::put($this->challengeKey($data['phone']), $challenge, now()->addMinutes(5));
 
-        Log::info('Authentication token generated.', [
-            'phone' => $data['phone'],
-            'token' => $token,
-        ]);
-
         $payload = [
             'message' => 'Verification code sent successfully.',
         ];
 
-        if (app()->environment('local')) {
+        if (app()->environment(['local', 'development'])) {
             $payload['token'] = $token;
         }
 
