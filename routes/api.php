@@ -34,8 +34,12 @@ use App\Http\Controllers\User\ProfileController as UserProfileController;
 use App\Http\Controllers\User\TicketController as UserTicketController;
 use Illuminate\Support\Facades\Route;
 
-Route::post('/auth/login', [AuthController::class, 'login'])->name('auth.login');
-Route::post('/auth/verify', [AuthController::class, 'verify'])->name('auth.verify');
+Route::post('/auth/login', [AuthController::class, 'login'])
+    ->middleware('throttle:auth-login')
+    ->name('auth.login');
+Route::post('/auth/verify', [AuthController::class, 'verify'])
+    ->middleware('throttle:auth-verify')
+    ->name('auth.verify');
 
 Route::post('/cart/check', [CartController::class, 'check'])->name('cart.check');
 Route::post('/cart/coupon', [CouponController::class, 'preview'])->name('cart.coupon');

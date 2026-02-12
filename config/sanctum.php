@@ -51,6 +51,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Impersonation Token Expiration
+    |--------------------------------------------------------------------------
+    |
+    | Admin-generated impersonation tokens should remain short-lived. This
+    | value controls the number of minutes before those tokens expire.
+    |
+    */
+
+    'impersonation_expiration' => (int) env('SANCTUM_IMPERSONATION_EXPIRATION', 60),
+
+    /*
+    |--------------------------------------------------------------------------
     | Token Prefix
     |--------------------------------------------------------------------------
     |

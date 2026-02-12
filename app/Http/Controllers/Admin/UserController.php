@@ -236,12 +236,15 @@ class UserController extends Controller
     )]
     public function loginAsUser(User $user): JsonResponse
     {
-        $token = $user->createToken('impersonation-token', ['*'])->plainTextToken;
+        $minutes = max((int) config('sanctum.impersonation_expiration', 60), 1);
+        $expiresAt = now()->addMinutes($minutes);
+        $token = $user->createToken('impersonation-token', ['*'], $expiresAt)->plainTextToken;
 
         return response()->json([
             'message' => 'Impersonation started for the requested user.',
             'user' => $user->load(['roles', 'permissions']),
             'token' => $token,
+            'expires_at' => $expiresAt->toISOString(),
         ]);
     }
 

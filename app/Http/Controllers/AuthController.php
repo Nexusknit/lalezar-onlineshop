@@ -45,18 +45,21 @@ class AuthController extends Controller
     public function login(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'phone' => ['required', 'string', 'max:20'],
+            'phone' => ['required', 'string', 'max:30'],
         ]);
+
+        $phone = $this->normalizePhone($data['phone']);
+        abort_if($phone === null, 422, 'Phone number format is invalid.');
 
         $token = (string) random_int(100_000, 999_999);
 
         $challenge = [
-            'phone' => $data['phone'],
+            'phone' => $phone,
             'token' => $token,
             'expires_at' => now()->addMinutes(5),
         ];
 
-        Cache::put($this->challengeKey($data['phone']), $challenge, now()->addMinutes(5));
+        Cache::put($this->challengeKey($phone), $challenge, now()->addMinutes(5));
 
         $payload = [
             'message' => 'Verification code sent successfully.',
@@ -104,19 +107,22 @@ class AuthController extends Controller
     public function verify(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'phone' => ['required', 'string', 'max:20'],
+            'phone' => ['required', 'string', 'max:30'],
             'token' => ['required', 'string', 'size:6'],
             'name' => ['nullable', 'string', 'max:255'],
             'email' => ['nullable', 'string', 'email', 'max:255'],
         ]);
 
-        $challenge = Cache::get($this->challengeKey($data['phone']));
+        $phone = $this->normalizePhone($data['phone']);
+        abort_if($phone === null, 422, 'Phone number format is invalid.');
+
+        $challenge = Cache::get($this->challengeKey($phone));
 
         if (! $challenge) {
             abort(422, 'No verification challenge found. Please request a new code.');
         }
 
-        if ($challenge['phone'] !== $data['phone'] || $challenge['token'] !== $data['token']) {
+        if (($challenge['phone'] ?? null) !== $phone || ! hash_equals((string) ($challenge['token'] ?? ''), (string) $data['token'])) {
             abort(422, 'Invalid phone number or verification code.');
         }
 
@@ -126,14 +132,14 @@ class AuthController extends Controller
             $expiration = $expiresAt instanceof Carbon ? $expiresAt : Carbon::parse($expiresAt);
 
             if (now()->greaterThan($expiration)) {
-                Cache::forget($this->challengeKey($data['phone']));
+                Cache::forget($this->challengeKey($phone));
 
                 abort(422, 'Verification code has expired. Please request a new code.');
             }
         }
 
         $user = User::query()->firstOrNew([
-            'phone' => $data['phone'],
+            'phone' => $phone,
         ]);
 
         if (! $user->exists) {
@@ -158,7 +164,7 @@ class AuthController extends Controller
             abort(403, 'Your account access has been disabled.');
         }
 
-        Cache::forget($this->challengeKey($data['phone']));
+        Cache::forget($this->challengeKey($phone));
 
         $token = $user->createToken('auth-token')->plainTextToken;
         $user->load([
@@ -199,5 +205,20 @@ class AuthController extends Controller
         $normalized = preg_replace('/\D+/', '', $phone);
 
         return 'auth:challenge:'.$normalized;
+    }
+
+    protected function normalizePhone(string $phone): ?string
+    {
+        $normalized = preg_replace('/\D+/', '', $phone);
+
+        if (! is_string($normalized) || $normalized === '') {
+            return null;
+        }
+
+        if (! preg_match('/^\d{10,15}$/', $normalized)) {
+            return null;
+        }
+
+        return $normalized;
     }
 }

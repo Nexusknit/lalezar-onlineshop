@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -259,6 +260,31 @@ class AdminContractsTest extends TestCase
         $path = (string) $response->json('path');
         $this->assertNotSame('', $path);
         Storage::disk('public')->assertExists($path);
+    }
+
+    public function test_admin_impersonation_token_has_expiration(): void
+    {
+        $admin = $this->createUserWithPermissions('user.login');
+        Sanctum::actingAs($admin);
+
+        $target = User::factory()->create();
+
+        $response = $this->postJson("/api/admin/users/{$target->id}/impersonate")
+            ->assertOk()
+            ->assertJsonPath('user.id', $target->id);
+
+        $this->assertNotNull($response->json('token'));
+        $this->assertNotNull($response->json('expires_at'));
+
+        $tokenRow = DB::table('personal_access_tokens')
+            ->where('tokenable_type', User::class)
+            ->where('tokenable_id', $target->id)
+            ->where('name', 'impersonation-token')
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($tokenRow);
+        $this->assertNotNull($tokenRow->expires_at);
     }
 
     protected function createUserWithPermissions(string ...$slugs): User
