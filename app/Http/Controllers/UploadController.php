@@ -9,6 +9,11 @@ use Illuminate\Validation\Rule;
 
 class UploadController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('permission:upload.store')->only('store');
+    }
+
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([

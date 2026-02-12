@@ -167,15 +167,23 @@ class AuthController extends Controller
         Cache::forget($this->challengeKey($data['phone']));
 
         $token = $user->createToken('auth-token')->plainTextToken;
+        $user->load([
+            'roles:id,name,slug',
+            'roles.permissions:id,name,slug',
+            'permissions:id,name,slug',
+        ]);
+
+        $permissions = $user->roles
+            ->flatMap->permissions
+            ->concat($user->permissions)
+            ->unique('id')
+            ->values()
+            ->all();
 
         return response()->json([
             'message' => 'Authentication successful.',
             'user' => $user,
-            'permissions' => $user->roles
-                ->flatMap->permissions
-                ->unique('id')
-                ->values()
-                ->all(),
+            'permissions' => $permissions,
             'token' => $token,
         ]);
     }

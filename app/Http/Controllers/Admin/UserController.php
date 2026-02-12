@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use OpenApi\Attributes as OA;
 
@@ -36,7 +37,7 @@ class UserController extends Controller
             ),
             new OA\Parameter(
                 name: 'search',
-                description: 'Filter by name or email',
+                description: 'Filter by name, phone, or email',
                 in: 'query',
                 schema: new OA\Schema(type: 'string')
             ),
@@ -57,6 +58,7 @@ class UserController extends Controller
                 $search = $request->string('search');
                 $query->where(static function ($query) use ($search) {
                     $query->where('name', 'like', "%{$search}%")
+                        ->orWhere('phone', 'like', "%{$search}%")
                         ->orWhere('email', 'like', "%{$search}%");
                 });
             })
@@ -74,10 +76,11 @@ class UserController extends Controller
         requestBody: new OA\RequestBody(
             required: true,
             content: new OA\JsonContent(
-                required: ['name', 'email', 'password'],
+                required: ['name', 'password'],
                 properties: [
                     new OA\Property(property: 'name', type: 'string', example: 'Admin User'),
-                    new OA\Property(property: 'email', type: 'string', example: 'admin@example.com'),
+                    new OA\Property(property: 'email', type: 'string', nullable: true, example: 'admin@example.com'),
+                    new OA\Property(property: 'phone', type: 'string', nullable: true, example: '09120000000'),
                     new OA\Property(property: 'password', type: 'string', example: 'secret123'),
                 ]
             )
@@ -93,7 +96,7 @@ class UserController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
+            'email' => ['nullable', 'string', 'email', 'max:255', 'unique:users,email'],
             'phone' => ['nullable', 'string', 'max:20', 'unique:users,phone'],
             'password' => ['required', 'string', 'min:8'],
             'accessibility' => ['sometimes', 'boolean'],
@@ -101,7 +104,7 @@ class UserController extends Controller
 
         $user = User::query()->create([
             'name' => $data['name'],
-            'email' => $data['email'],
+            'email' => $this->resolveEmail($data),
             'phone' => $data['phone'] ?? null,
             'password' => Hash::make($data['password']),
             'accessibility' => $data['accessibility'] ?? true,
@@ -240,5 +243,17 @@ class UserController extends Controller
             'user' => $user->load(['roles', 'permissions']),
             'token' => $token,
         ]);
+    }
+
+    protected function resolveEmail(array $data): string
+    {
+        if (! empty($data['email'])) {
+            return $data['email'];
+        }
+
+        $numericPhone = preg_replace('/\D+/', '', (string) ($data['phone'] ?? ''));
+        $fallback = $numericPhone !== '' ? $numericPhone : Str::lower(Str::random(10));
+
+        return sprintf('%s@phone.local', $fallback);
     }
 }

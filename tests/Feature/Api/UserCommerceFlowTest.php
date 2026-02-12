@@ -139,6 +139,12 @@ class UserCommerceFlowTest extends TestCase
             'quantity' => 2,
             'name' => 'QA Product',
         ]);
+
+        $this->assertDatabaseHas('products', [
+            'id' => $product->id,
+            'stock' => 8,
+            'sold_count' => 2,
+        ]);
     }
 
     public function test_authenticated_user_can_add_and_remove_favorites(): void
@@ -307,6 +313,12 @@ class UserCommerceFlowTest extends TestCase
         $this->assertDatabaseHas('coupons', [
             'id' => $coupon->id,
             'used_count' => 1,
+        ]);
+
+        $this->assertDatabaseHas('products', [
+            'id' => $product->id,
+            'stock' => 8,
+            'sold_count' => 2,
         ]);
     }
 }

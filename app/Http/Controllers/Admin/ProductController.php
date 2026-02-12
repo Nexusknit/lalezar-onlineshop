@@ -31,6 +31,7 @@ class ProductController extends Controller
         parameters: [
             new OA\Parameter(name: 'per_page', in: 'query', schema: new OA\Schema(type: 'integer')),
             new OA\Parameter(name: 'status', in: 'query', schema: new OA\Schema(type: 'string')),
+            new OA\Parameter(name: 'search', in: 'query', schema: new OA\Schema(type: 'string')),
         ],
         responses: [
             new OA\Response(response: 200, description: 'Products retrieved', content: new OA\JsonContent(type: 'object')),
@@ -46,6 +47,14 @@ class ProductController extends Controller
             ->with(['creator', 'categories', 'tags', 'galleries', 'attributes', 'brands'])
             ->when($request->filled('status'), static function ($query) use ($request) {
                 $query->where('status', $request->string('status'));
+            })
+            ->when($request->filled('search'), static function ($query) use ($request): void {
+                $term = trim((string) $request->string('search'));
+                $query->where(static function ($query) use ($term): void {
+                    $query->where('name', 'like', "%{$term}%")
+                        ->orWhere('slug', 'like', "%{$term}%")
+                        ->orWhere('sku', 'like', "%{$term}%");
+                });
             })
             ->latest()
             ->paginate($perPage);

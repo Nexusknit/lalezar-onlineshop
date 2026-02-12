@@ -44,6 +44,9 @@ class PermissionSeeder extends Seeder
             'product.activate',
             'product.specialize',
 
+            // Uploads
+            'upload.store',
+
             // Roles
             'role.all',
             'role.store',

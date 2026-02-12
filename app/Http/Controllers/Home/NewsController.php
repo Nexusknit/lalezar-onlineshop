@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Home;
 
 use App\Http\Controllers\Controller;
 use App\Models\News;
+use App\Support\Loaders\NewsLoader;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -54,7 +55,8 @@ class NewsController extends Controller
                 });
             })
             ->latest('published_at')
-            ->paginate($perPage);
+            ->paginate($perPage)
+            ->through(fn (News $item) => NewsLoader::make($item));
 
         return response()->json($news);
     }
@@ -90,6 +92,6 @@ class NewsController extends Controller
         $news->setRelation('likes', $news->likes->take(20));
         $news->setRelation('comments', $news->comments->take(20));
 
-        return response()->json($news);
+        return response()->json(NewsLoader::make($news));
     }
 }

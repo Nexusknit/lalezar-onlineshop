@@ -7,6 +7,8 @@ use App\Models\Permission;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -140,6 +142,123 @@ class AdminContractsTest extends TestCase
 
         $this->getJson("/api/admin/products/{$product->id}")
             ->assertForbidden();
+    }
+
+    public function test_admin_product_index_can_filter_by_search_parameter(): void
+    {
+        $admin = $this->createUserWithPermissions('product.all');
+        Sanctum::actingAs($admin);
+
+        $creator = User::factory()->create();
+        $matched = Product::query()->create([
+            'creator_id' => $creator->id,
+            'name' => 'Searchable Lamp',
+            'slug' => 'searchable-lamp',
+            'sku' => 'SRCH-LAMP-001',
+            'stock' => 5,
+            'price' => 99000,
+            'currency' => 'IRR',
+            'status' => 'active',
+        ]);
+
+        $notMatched = Product::query()->create([
+            'creator_id' => $creator->id,
+            'name' => 'Desk Fan',
+            'slug' => 'desk-fan',
+            'sku' => 'FAN-001',
+            'stock' => 5,
+            'price' => 88000,
+            'currency' => 'IRR',
+            'status' => 'active',
+        ]);
+
+        $response = $this->getJson('/api/admin/products?search=lamp');
+        $response->assertOk();
+
+        $ids = collect($response->json('data'))->pluck('id');
+        $this->assertTrue($ids->contains($matched->id));
+        $this->assertFalse($ids->contains($notMatched->id));
+    }
+
+    public function test_admin_can_create_user_without_email(): void
+    {
+        $admin = $this->createUserWithPermissions('user.store');
+        Sanctum::actingAs($admin);
+
+        $this->postJson('/api/admin/users', [
+            'name' => 'Phone Only User',
+            'phone' => '09123334455',
+            'password' => 'secret123',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('phone', '09123334455')
+            ->assertJsonPath('email', '09123334455@phone.local');
+
+        $this->assertDatabaseHas('users', [
+            'phone' => '09123334455',
+            'email' => '09123334455@phone.local',
+        ]);
+    }
+
+    public function test_admin_user_index_can_filter_by_phone_search_parameter(): void
+    {
+        $admin = $this->createUserWithPermissions('user.all');
+        Sanctum::actingAs($admin);
+
+        $matched = User::factory()->create([
+            'name' => 'Matched User',
+            'phone' => '09125550001',
+            'email' => 'matched@example.com',
+        ]);
+
+        $notMatched = User::factory()->create([
+            'name' => 'Other User',
+            'phone' => '09126660002',
+            'email' => 'other@example.com',
+        ]);
+
+        $response = $this->getJson('/api/admin/users?search=5550001');
+        $response->assertOk();
+
+        $ids = collect($response->json('data'))->pluck('id');
+        $this->assertTrue($ids->contains($matched->id));
+        $this->assertFalse($ids->contains($notMatched->id));
+    }
+
+    public function test_admin_upload_requires_permission(): void
+    {
+        Storage::fake('public');
+
+        $admin = User::factory()->create();
+        Sanctum::actingAs($admin);
+
+        $this->post('/api/admin/uploads', [
+            'file' => UploadedFile::fake()->image('catalog.jpg'),
+        ], [
+            'Accept' => 'application/json',
+        ])->assertForbidden();
+    }
+
+    public function test_admin_can_upload_image_when_permission_exists(): void
+    {
+        Storage::fake('public');
+
+        $admin = $this->createUserWithPermissions('upload.store');
+        Sanctum::actingAs($admin);
+
+        $response = $this->post('/api/admin/uploads', [
+            'file' => UploadedFile::fake()->image('catalog.jpg'),
+        ], [
+            'Accept' => 'application/json',
+        ]);
+
+        $response
+            ->assertCreated()
+            ->assertJsonPath('disk', 'public');
+
+        $path = (string) $response->json('path');
+        $this->assertNotSame('', $path);
+        Storage::disk('public')->assertExists($path);
     }
 
     protected function createUserWithPermissions(string ...$slugs): User
