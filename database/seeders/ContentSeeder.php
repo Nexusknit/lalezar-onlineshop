@@ -2,10 +2,16 @@
 
 namespace Database\Seeders;
 
+use App\Models\Address;
 use App\Models\Blog;
 use App\Models\Brand;
 use App\Models\Category;
 use App\Models\Coupon;
+use App\Models\CouponUsage;
+use App\Models\Invoice;
+use App\Models\Item;
+use App\Models\News;
+use App\Models\Payment;
 use App\Models\Product;
 use App\Models\TeamMember;
 use App\Models\User;
@@ -32,6 +38,8 @@ class ContentSeeder extends Seeder
 
         $this->seedProducts($creator, $brands, $categories);
         $this->seedBlogs($creator, $categories);
+        $this->seedNews($creator, $categories);
+        $this->seedInvoices();
         $this->seedTeamMembers($creator);
     }
 
@@ -279,7 +287,7 @@ class ContentSeeder extends Seeder
                 'price' => 7800000,
                 'discount_percent' => 12,
                 'currency' => 'IRR',
-                'status' => 'published',
+                'status' => 'active',
                 'meta' => [
                     'color_temperature' => '3000K',
                     'warranty_months' => 36,
@@ -296,7 +304,7 @@ class ContentSeeder extends Seeder
                 'price' => 5400000,
                 'discount_percent' => 5,
                 'currency' => 'IRR',
-                'status' => 'published',
+                'status' => 'active',
                 'meta' => [
                     'dimmable' => true,
                     'materials' => ['aluminum', 'oak'],
@@ -313,7 +321,7 @@ class ContentSeeder extends Seeder
                 'price' => 12900000,
                 'discount_percent' => 8,
                 'currency' => 'IRR',
-                'status' => 'published',
+                'status' => 'active',
                 'meta' => [
                     'ip_rating' => 'IP66',
                     'warranty_months' => 48,
@@ -330,7 +338,7 @@ class ContentSeeder extends Seeder
                 'price' => 9100000,
                 'discount_percent' => 10,
                 'currency' => 'IRR',
-                'status' => 'published',
+                'status' => 'active',
                 'meta' => [
                     'beam_angle' => '30°',
                     'ip_rating' => 'IP65',
@@ -347,7 +355,7 @@ class ContentSeeder extends Seeder
                 'price' => 4600000,
                 'discount_percent' => 0,
                 'currency' => 'IRR',
-                'status' => 'published',
+                'status' => 'active',
                 'meta' => [
                     'protocols' => ['Matter', 'Zigbee'],
                     'app_support' => ['iOS', 'Android'],
@@ -399,7 +407,7 @@ class ContentSeeder extends Seeder
                 'excerpt' => 'Use accent and task lights together to keep compact spaces flexible.',
                 'body' => 'Layering fixtures lets residents change the mood without rewiring. Start with a soft cove glow, add pendants for drama, and finish with portable lamps for late-night reading.',
                 'categories' => ['lighting-decor', 'indoor-lighting'],
-                'status' => 'published',
+                'status' => 'active',
                 'meta' => ['read_time' => '6 min', 'featured' => true],
             ],
             [
@@ -408,7 +416,7 @@ class ContentSeeder extends Seeder
                 'excerpt' => 'Precision dimming and schedules can reduce utility costs by 18%.',
                 'body' => 'Smart dimmers let you map routines to occupancy and daylight data. The result: less glare, happier teams, and measurable savings for both homes and offices.',
                 'categories' => ['smart-living'],
-                'status' => 'published',
+                'status' => 'active',
                 'meta' => ['read_time' => '4 min'],
             ],
             [
@@ -417,7 +425,7 @@ class ContentSeeder extends Seeder
                 'excerpt' => 'Guests decide in 10 seconds whether a hotel feels premium.',
                 'body' => 'Uniform wall washers, discreet uplights, and a single accent color keep facades timeless. Add sensors so the show only runs when passersby are nearby.',
                 'categories' => ['outdoor-lighting', 'commercial-solutions'],
-                'status' => 'published',
+                'status' => 'active',
                 'meta' => ['read_time' => '5 min'],
             ],
             [
@@ -426,7 +434,7 @@ class ContentSeeder extends Seeder
                 'excerpt' => 'Artists need accurate color during the day and calm amber hues by night.',
                 'body' => 'Pair high CRI track lighting with a warm ambient glow. Task lights with adjustable lenses keep canvases glare-free, while amber night scenes help creators wind down.',
                 'categories' => ['indoor-lighting'],
-                'status' => 'published',
+                'status' => 'active',
                 'meta' => ['read_time' => '7 min'],
             ],
             [
@@ -435,7 +443,7 @@ class ContentSeeder extends Seeder
                 'excerpt' => 'Adaptive controls balance focus rooms, lounges, and huddle corners.',
                 'body' => 'A hybrid office needs scenes for focus, collaboration, and video. Tuneable white fixtures synced with scheduling tools keep employees energized yet calm.',
                 'categories' => ['commercial-solutions', 'smart-living'],
-                'status' => 'published',
+                'status' => 'active',
                 'meta' => ['read_time' => '8 min'],
             ],
         ];
@@ -466,6 +474,304 @@ class ContentSeeder extends Seeder
 
             $blog->categories()->sync($categoryIds);
         }
+    }
+
+    private function seedNews(User $creator, Collection $categories): void
+    {
+        $definitions = [
+            [
+                'headline' => 'Lalezar Opens New Experience Showroom in Tehran',
+                'summary' => 'The new showroom blends interactive lighting zones with design consultations.',
+                'content' => 'Located in Elahieh, the space features hospitality mockups, residential scenes, and a rapid sample lab for architects. The showroom is open daily except Fridays.',
+                'categories' => ['lighting-decor', 'indoor-lighting'],
+                'status' => 'active',
+                'meta' => [
+                    'priority' => 'high',
+                    'cover_image' => 'news/showroom-tehran.jpg',
+                ],
+            ],
+            [
+                'headline' => 'Pulse Smart Line Receives Matter 1.3 Compatibility',
+                'summary' => 'Firmware updates unlock smoother onboarding for mixed-brand smart homes.',
+                'content' => 'The update includes faster pairing, improved scene sync, and lower standby draw. Existing customers can update through the Pulse mobile app with no extra hardware.',
+                'categories' => ['smart-living'],
+                'status' => 'special',
+                'meta' => [
+                    'priority' => 'medium',
+                    'cover_image' => 'news/matter-compatibility.jpg',
+                ],
+            ],
+            [
+                'headline' => 'Commercial Retrofit Program Expanded to Three New Provinces',
+                'summary' => 'Energy-audit and installation services now cover Isfahan, Fars, and Mazandaran.',
+                'content' => 'The expanded program targets retail chains and offices needing lower operating costs. Participating clients receive ROI projections and phased upgrade plans.',
+                'categories' => ['commercial-solutions'],
+                'status' => 'active',
+                'meta' => [
+                    'priority' => 'medium',
+                    'cover_image' => 'news/retrofit-program.jpg',
+                ],
+            ],
+            [
+                'headline' => 'Seasonal Outdoor Collection Preview Announced',
+                'summary' => 'Design partners can request early access to new outdoor fixtures.',
+                'content' => 'The preview includes corrosion-resistant bollards, adjustable facade blades, and low-voltage garden markers tuned for warm climates.',
+                'categories' => ['outdoor-lighting'],
+                'status' => 'active',
+                'meta' => [
+                    'priority' => 'low',
+                    'cover_image' => 'news/outdoor-preview.jpg',
+                ],
+            ],
+        ];
+
+        foreach ($definitions as $index => $definition) {
+            $slug = $definition['slug'] ?? Str::slug($definition['headline']);
+
+            $news = News::query()->updateOrCreate(
+                ['slug' => $slug],
+                [
+                    'creator_id' => $creator->id,
+                    'headline' => $definition['headline'],
+                    'summary' => $definition['summary'] ?? null,
+                    'content' => $definition['content'] ?? null,
+                    'status' => $definition['status'] ?? 'draft',
+                    'published_at' => $definition['published_at'] ?? now()->subDays($index + 1),
+                    'meta' => $definition['meta'] ?? [],
+                ],
+            );
+
+            $categoryIds = collect($definition['categories'] ?? [])
+                ->map(fn (string $categorySlug) => $categories->get($categorySlug)?->id)
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            $news->categories()->sync($categoryIds);
+        }
+    }
+
+    private function seedInvoices(): void
+    {
+        $customer = User::query()->updateOrCreate(
+            ['email' => 'customer@example.com'],
+            [
+                'name' => 'Demo Customer',
+                'phone' => '09123334455',
+                'password' => bcrypt('password'),
+                'accessibility' => true,
+            ],
+        );
+
+        $city = \App\Models\City::query()
+            ->orderBy('id')
+            ->first();
+
+        if (! $city) {
+            return;
+        }
+
+        $address = Address::query()->updateOrCreate(
+            [
+                'user_id' => $customer->id,
+                'label' => 'Head Office',
+            ],
+            [
+                'city_id' => $city->id,
+                'recipient_name' => $customer->name,
+                'phone' => $customer->phone,
+                'street_line1' => 'No. 12, Andarzgoo Blvd',
+                'street_line2' => 'Unit 4',
+                'postal_code' => '1958833471',
+                'building' => 'Mehr Building',
+                'unit' => '4',
+                'is_default' => true,
+                'meta' => ['type' => 'business'],
+            ],
+        );
+
+        $products = Product::query()
+            ->whereIn('sku', ['LZ-PRD-001', 'LZ-PRD-003', 'LZ-PRD-005'])
+            ->get()
+            ->keyBy('sku');
+
+        if ($products->isEmpty()) {
+            return;
+        }
+
+        $welcomeCoupon = Coupon::query()->where('code', 'WELCOME10')->first();
+        $saveCoupon = Coupon::query()->where('code', 'SAVE250K')->first();
+
+        $definitions = [
+            [
+                'number' => 'INV-DEMO-1001',
+                'status' => 'paid',
+                'currency' => 'IRR',
+                'issued_at' => now()->subDays(5),
+                'due_at' => now()->subDays(2),
+                'lines' => [
+                    ['sku' => 'LZ-PRD-001', 'quantity' => 1],
+                    ['sku' => 'LZ-PRD-005', 'quantity' => 2],
+                ],
+                'coupon' => $welcomeCoupon,
+                'payment' => [
+                    'method' => 'gateway',
+                    'status' => 'paid',
+                    'reference' => 'PAY-DEMO-1001',
+                    'paid_at' => now()->subDays(5),
+                ],
+            ],
+            [
+                'number' => 'INV-DEMO-1002',
+                'status' => 'pending',
+                'currency' => 'IRR',
+                'issued_at' => now()->subDays(1),
+                'due_at' => now()->addDays(2),
+                'lines' => [
+                    ['sku' => 'LZ-PRD-003', 'quantity' => 1],
+                ],
+                'coupon' => $saveCoupon,
+                'payment' => [
+                    'method' => 'bank-transfer',
+                    'status' => 'pending',
+                    'reference' => 'PAY-DEMO-1002',
+                    'paid_at' => null,
+                ],
+            ],
+            [
+                'number' => 'INV-DEMO-1003',
+                'status' => 'failed',
+                'currency' => 'IRR',
+                'issued_at' => now()->subDays(3),
+                'due_at' => now()->subDay(),
+                'lines' => [
+                    ['sku' => 'LZ-PRD-001', 'quantity' => 1],
+                ],
+                'coupon' => null,
+                'payment' => [
+                    'method' => 'gateway',
+                    'status' => 'failed',
+                    'reference' => 'PAY-DEMO-1003',
+                    'paid_at' => null,
+                ],
+            ],
+        ];
+
+        foreach ($definitions as $definition) {
+            $lineItems = collect($definition['lines'])
+                ->map(function (array $line) use ($products): ?array {
+                    /** @var Product|null $product */
+                    $product = $products->get($line['sku']);
+                    if (! $product) {
+                        return null;
+                    }
+
+                    $quantity = max(1, (int) ($line['quantity'] ?? 1));
+                    $unitPrice = (float) $product->price;
+
+                    return [
+                        'product' => $product,
+                        'quantity' => $quantity,
+                        'unit_price' => $unitPrice,
+                        'total' => round($quantity * $unitPrice, 2),
+                    ];
+                })
+                ->filter()
+                ->values();
+
+            if ($lineItems->isEmpty()) {
+                continue;
+            }
+
+            $subtotal = (float) $lineItems->sum('total');
+            /** @var Coupon|null $coupon */
+            $coupon = $definition['coupon'] ?? null;
+            $discount = $coupon ? $coupon->calculateDiscount($subtotal) : 0.0;
+            $total = round(max(0, $subtotal - $discount), 2);
+
+            $invoice = Invoice::query()->updateOrCreate(
+                ['number' => $definition['number']],
+                [
+                    'user_id' => $customer->id,
+                    'address_id' => $address->id,
+                    'coupon_id' => $coupon?->id,
+                    'status' => $definition['status'],
+                    'currency' => $definition['currency'],
+                    'subtotal' => $subtotal,
+                    'tax' => 0,
+                    'discount' => $discount,
+                    'total' => $total,
+                    'issued_at' => $definition['issued_at'],
+                    'due_at' => $definition['due_at'],
+                    'meta' => [
+                        'seeded' => true,
+                        'channel' => 'demo-seeder',
+                    ],
+                ],
+            );
+
+            Item::query()->where('invoice_id', $invoice->id)->delete();
+            foreach ($lineItems as $lineItem) {
+                /** @var Product $lineProduct */
+                $lineProduct = $lineItem['product'];
+
+                Item::query()->create([
+                    'invoice_id' => $invoice->id,
+                    'product_id' => $lineProduct->id,
+                    'name' => $lineProduct->name,
+                    'description' => $lineProduct->description,
+                    'quantity' => $lineItem['quantity'],
+                    'unit_price' => $lineItem['unit_price'],
+                    'total' => $lineItem['total'],
+                    'meta' => [
+                        'sku' => $lineProduct->sku,
+                        'product_status' => $lineProduct->status,
+                    ],
+                ]);
+            }
+
+            $payment = $definition['payment'] ?? null;
+            if (is_array($payment) && ! empty($payment['reference'])) {
+                Payment::query()->updateOrCreate(
+                    [
+                        'invoice_id' => $invoice->id,
+                        'reference' => $payment['reference'],
+                    ],
+                    [
+                        'user_id' => $customer->id,
+                        'amount' => $total,
+                        'currency' => $definition['currency'],
+                        'method' => $payment['method'] ?? null,
+                        'status' => $payment['status'] ?? 'pending',
+                        'meta' => ['seeded' => true],
+                        'paid_at' => $payment['paid_at'] ?? null,
+                    ],
+                );
+            }
+
+            if ($coupon) {
+                CouponUsage::query()->updateOrCreate(
+                    [
+                        'coupon_id' => $coupon->id,
+                        'invoice_id' => $invoice->id,
+                    ],
+                    [
+                        'user_id' => $customer->id,
+                        'discount_amount' => $discount,
+                        'used_at' => $definition['issued_at'],
+                    ],
+                );
+            }
+        }
+
+        Coupon::query()
+            ->whereIn('code', ['WELCOME10', 'SAVE250K'])
+            ->each(function (Coupon $coupon): void {
+                $coupon->update([
+                    'used_count' => $coupon->usages()->count(),
+                ]);
+            });
     }
 
     private function seedTeamMembers(User $creator): void

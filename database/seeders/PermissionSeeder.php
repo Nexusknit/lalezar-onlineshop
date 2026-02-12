@@ -63,8 +63,16 @@ class PermissionSeeder extends Seeder
             'category.all',
             'category.store',
             'category.update',
+            'category.delete',
             'category.activate',
             'category.specialize',
+
+            // Brands
+            'brand.all',
+            'brand.store',
+            'brand.update',
+            'brand.delete',
+            'brand.activate',
 
             // Geography
             'state.all',

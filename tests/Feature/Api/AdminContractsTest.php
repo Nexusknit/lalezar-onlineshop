@@ -14,6 +14,53 @@ class AdminContractsTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_permission_seeder_covers_all_controller_permission_middleware_slugs(): void
+    {
+        $controllerFiles = [];
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator(app_path('Http/Controllers'))
+        );
+
+        foreach ($iterator as $file) {
+            if (! $file->isFile() || $file->getExtension() !== 'php') {
+                continue;
+            }
+
+            $controllerFiles[] = $file->getPathname();
+        }
+
+        $usedSlugs = [];
+        foreach ($controllerFiles as $path) {
+            $source = file_get_contents($path);
+            if ($source === false) {
+                continue;
+            }
+
+            if (preg_match_all('/permission:([A-Za-z0-9_.]+)/', $source, $matches)) {
+                foreach ($matches[1] as $slug) {
+                    $usedSlugs[$slug] = true;
+                }
+            }
+        }
+
+        $seedSource = file_get_contents(base_path('database/seeders/PermissionSeeder.php')) ?: '';
+        $declaredSlugs = [];
+        if (preg_match_all("/'([a-z0-9]+(?:[.][A-Za-z0-9]+)+)'/", $seedSource, $matches)) {
+            foreach ($matches[1] as $slug) {
+                $declaredSlugs[$slug] = true;
+            }
+        }
+
+        $missing = array_keys(array_diff_key($usedSlugs, $declaredSlugs));
+        sort($missing);
+
+        $this->assertSame(
+            [],
+            $missing,
+            'Missing permission slug(s) in PermissionSeeder: '.implode(', ', $missing)
+        );
+    }
+
     public function test_admin_can_show_product_and_delete_category_when_permissions_exist(): void
     {
         $admin = $this->createUserWithPermissions('product.all', 'category.delete');
