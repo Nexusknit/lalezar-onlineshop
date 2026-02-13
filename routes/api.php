@@ -62,6 +62,7 @@ Route::prefix('home')
         Route::get('/cities', [HomeLocationController::class, 'cities'])->name('cities.index');
 
         Route::get('/brands', [HomeBrandController::class, 'all'])->name('brands.index');
+        Route::get('/brands/{brand:slug}', [HomeBrandController::class, 'single'])->name('brands.show');
         Route::get('/team', [HomeTeamController::class, 'all'])->name('team.index');
 
         Route::get('/search', [HomeSearchController::class, 'index'])->name('search');
@@ -90,6 +91,8 @@ Route::prefix('user')
         Route::get('/addresses/{address}', [UserAddressController::class, 'show'])->name('addresses.show');
         Route::match(['put', 'patch'], '/addresses/{address}', [UserAddressController::class, 'update'])->name('addresses.update');
         Route::delete('/addresses/{address}', [UserAddressController::class, 'destroy'])->name('addresses.destroy');
+        Route::get('/invoices', [\App\Http\Controllers\User\InvoiceController::class, 'index'])->name('invoices.index');
+        Route::get('/invoices/{invoice}', [\App\Http\Controllers\User\InvoiceController::class, 'show'])->name('invoices.show');
 
         Route::post('/checkout', [PaymentController::class, 'checkout'])->name('checkout');
     });

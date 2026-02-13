@@ -13,10 +13,13 @@ class BrandLoader
     {
         return [
             'id' => $brand->id,
+            'slug' => $brand->slug,
             'products' => $brand->relationLoaded('products')
                 ? $brand->products->pluck('id')->values()->all()
                 : [],
             'name' => $brand->name,
+            'summary' => $brand->summary,
+            'content' => $brand->content,
             'description' => $brand->description,
             'email' => $brand->email,
             'website' => $brand->website,

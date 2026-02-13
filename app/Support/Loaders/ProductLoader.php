@@ -12,6 +12,7 @@ class ProductLoader
     public static function make(Product $product): array
     {
         $primaryCategory = $product->categories->first();
+        $primaryBrand = $product->brands->first();
         $categoryPayload = [
             'name' => $primaryCategory?->parent?->name ?? $primaryCategory?->name,
             'child' => $primaryCategory?->slug,
@@ -28,7 +29,8 @@ class ProductLoader
             'discount_percentage' => $product->discount_percent,
             'quantity' => $product->stock,
             'related_images' => self::relatedImages($product),
-            'brand' => $product->brands->first()?->name,
+            'brand' => $primaryBrand?->name,
+            'brand_slug' => $primaryBrand?->slug,
             'description' => $product->description,
             'additionalInformation' => self::additionalInformation($product),
             'tags' => $product->tags->pluck('name')->values()->all(),

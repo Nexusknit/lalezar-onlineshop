@@ -4,6 +4,7 @@ namespace Tests\Feature\Api;
 
 use App\Models\City;
 use App\Models\Coupon;
+use App\Models\Invoice;
 use App\Models\Product;
 use App\Models\State;
 use App\Models\User;
@@ -320,5 +321,155 @@ class UserCommerceFlowTest extends TestCase
             'stock' => 8,
             'sold_count' => 2,
         ]);
+    }
+
+    public function test_checkout_includes_shipping_and_tax_in_total(): void
+    {
+        $user = User::factory()->create([
+            'phone' => '09120000006',
+            'accessibility' => true,
+        ]);
+        Sanctum::actingAs($user);
+
+        $state = State::query()->create([
+            'name' => 'Tehran',
+            'slug' => 'tehran',
+            'code' => 'THR',
+        ]);
+        $city = City::query()->create([
+            'state_id' => $state->id,
+            'name' => 'Tehran',
+            'slug' => 'tehran-city',
+            'code' => 'THR-1',
+        ]);
+
+        $addressResponse = $this->postJson('/api/user/addresses', [
+            'city_id' => $city->id,
+            'label' => 'Home',
+            'recipient_name' => 'Ehsan',
+            'phone' => '09120000006',
+            'street_line1' => 'Valiasr St',
+            'is_default' => true,
+        ]);
+        $addressResponse->assertCreated();
+        $addressId = (int) $addressResponse->json('id');
+
+        $creator = User::factory()->create();
+        $product = Product::query()->create([
+            'creator_id' => $creator->id,
+            'name' => 'Shipping Tax Product',
+            'slug' => 'shipping-tax-product',
+            'sku' => 'SHP-TAX-001',
+            'stock' => 5,
+            'price' => 100000,
+            'currency' => 'IRR',
+            'status' => 'active',
+        ]);
+
+        $this->postJson('/api/user/checkout', [
+            'address_id' => $addressId,
+            'shipping' => 7000,
+            'tax' => 1000,
+            'items' => [
+                [
+                    'product_id' => $product->id,
+                    'quantity' => 1,
+                ],
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('subtotal', '100000.00')
+            ->assertJsonPath('discount', '0.00')
+            ->assertJsonPath('tax', '1000.00')
+            ->assertJsonPath('total', '108000.00')
+            ->assertJsonPath('meta.shipping', 7000)
+            ->assertJsonPath('meta.tax', 1000);
+    }
+
+    public function test_authenticated_user_can_list_and_view_only_own_invoices(): void
+    {
+        $user = User::factory()->create([
+            'phone' => '09120000007',
+            'accessibility' => true,
+        ]);
+        Sanctum::actingAs($user);
+
+        $state = State::query()->create([
+            'name' => 'Tehran',
+            'slug' => 'tehran',
+            'code' => 'THR',
+        ]);
+        $city = City::query()->create([
+            'state_id' => $state->id,
+            'name' => 'Tehran',
+            'slug' => 'tehran-city',
+            'code' => 'THR-1',
+        ]);
+
+        $addressResponse = $this->postJson('/api/user/addresses', [
+            'city_id' => $city->id,
+            'label' => 'Home',
+            'recipient_name' => 'Ehsan',
+            'phone' => '09120000007',
+            'street_line1' => 'Valiasr St',
+            'is_default' => true,
+        ]);
+        $addressResponse->assertCreated();
+        $addressId = (int) $addressResponse->json('id');
+
+        $creator = User::factory()->create();
+        $product = Product::query()->create([
+            'creator_id' => $creator->id,
+            'name' => 'Invoice Product',
+            'slug' => 'invoice-product',
+            'sku' => 'INV-PROD-001',
+            'stock' => 10,
+            'price' => 100000,
+            'currency' => 'IRR',
+            'status' => 'active',
+        ]);
+
+        $checkoutResponse = $this->postJson('/api/user/checkout', [
+            'address_id' => $addressId,
+            'items' => [
+                [
+                    'product_id' => $product->id,
+                    'quantity' => 1,
+                ],
+            ],
+        ])->assertOk();
+
+        $ownInvoiceId = (int) $checkoutResponse->json('id');
+
+        $otherUser = User::factory()->create();
+        $otherAddress = $otherUser->addresses()->create([
+            'city_id' => $city->id,
+            'street_line1' => 'Other St',
+        ]);
+
+        $otherInvoice = Invoice::query()->create([
+            'user_id' => $otherUser->id,
+            'address_id' => $otherAddress->id,
+            'number' => 'INV-OTHER-0001',
+            'status' => 'pending',
+            'currency' => 'IRR',
+            'subtotal' => 100000,
+            'tax' => 0,
+            'discount' => 0,
+            'total' => 100000,
+            'issued_at' => now(),
+        ]);
+
+        $this->getJson('/api/user/invoices')
+            ->assertOk()
+            ->assertJsonFragment(['id' => $ownInvoiceId])
+            ->assertJsonMissing(['id' => $otherInvoice->id]);
+
+        $this->getJson("/api/user/invoices/{$ownInvoiceId}")
+            ->assertOk()
+            ->assertJsonPath('id', $ownInvoiceId);
+
+        $this->getJson("/api/user/invoices/{$otherInvoice->id}")
+            ->assertNotFound();
     }
 }

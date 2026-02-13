@@ -33,6 +33,8 @@ class PaymentController extends Controller
                 properties: [
                     new OA\Property(property: 'address_id', type: 'integer', example: 3),
                     new OA\Property(property: 'coupon_code', type: 'string', nullable: true, example: 'WELCOME10'),
+                    new OA\Property(property: 'shipping', type: 'number', format: 'float', nullable: true, example: 70000),
+                    new OA\Property(property: 'tax', type: 'number', format: 'float', nullable: true, example: 0),
                     new OA\Property(
                         property: 'items',
                         type: 'array',
@@ -64,6 +66,8 @@ class PaymentController extends Controller
         $data = $request->validate([
             'address_id' => ['required', 'integer'],
             'coupon_code' => ['nullable', 'string', 'max:64'],
+            'shipping' => ['nullable', 'numeric', 'min:0'],
+            'tax' => ['nullable', 'numeric', 'min:0'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'integer', 'distinct'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
@@ -132,6 +136,22 @@ class PaymentController extends Controller
             }
 
             $total = round(max(0, (float) $subtotal - $discount), 2);
+            $shipping = round(max(0, (float) ($data['shipping'] ?? 0)), 2);
+            $tax = round(max(0, (float) ($data['tax'] ?? 0)), 2);
+            $grandTotal = round(max(0, $total + $shipping + $tax), 2);
+
+            $meta = $coupon ? [
+                'coupon' => [
+                    'id' => $coupon->id,
+                    'code' => $coupon->code,
+                    'discount_type' => $coupon->discount_type,
+                    'discount_value' => $coupon->discount_value,
+                    'calculated_discount' => $discount,
+                ],
+            ] : [];
+
+            $meta['shipping'] = $shipping;
+            $meta['tax'] = $tax;
 
             $invoice = Invoice::query()->create([
                 'user_id' => $user->id,
@@ -141,19 +161,11 @@ class PaymentController extends Controller
                 'status' => 'pending',
                 'currency' => $currency,
                 'subtotal' => $subtotal,
-                'tax' => 0,
+                'tax' => $tax,
                 'discount' => $discount,
-                'total' => $total,
+                'total' => $grandTotal,
                 'issued_at' => now(),
-                'meta' => $coupon ? [
-                    'coupon' => [
-                        'id' => $coupon->id,
-                        'code' => $coupon->code,
-                        'discount_type' => $coupon->discount_type,
-                        'discount_value' => $coupon->discount_value,
-                        'calculated_discount' => $discount,
-                    ],
-                ] : null,
+                'meta' => $meta,
             ]);
 
             $itemsPayload->each(function (array $payload) use ($invoice): void {
