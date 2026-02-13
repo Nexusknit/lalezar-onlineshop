@@ -50,7 +50,8 @@ class HomeProductFiltersTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $product->id)
-            ->assertJsonPath('data.0.category.child', 'commercial-solutions');
+            ->assertJsonPath('data.0.category.child', 'commercial-solutions')
+            ->assertJsonPath('data.0.currency', 'IRR');
     }
 
     public function test_home_products_supports_combined_brand_category_price_color_size_and_rating_filters(): void
@@ -129,7 +130,8 @@ class HomeProductFiltersTest extends TestCase
         $this->getJson('/api/home/products?category=smart-living&brand=pulse-smart&color=black&sizes=m&minPrice=120&maxPrice=200&rating=4')
             ->assertOk()
             ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.id', $match->id);
+            ->assertJsonPath('data.0.id', $match->id)
+            ->assertJsonPath('data.0.currency', 'IRR');
     }
 
     public function test_home_brand_slug_endpoint_returns_brand_and_active_products(): void
@@ -170,6 +172,7 @@ class HomeProductFiltersTest extends TestCase
             ->assertOk()
             ->assertJsonPath('brand.slug', 'lalezar-atelier')
             ->assertJsonPath('products.data.0.id', $activeProduct->id)
+            ->assertJsonPath('products.data.0.currency', 'IRR')
             ->assertJsonMissing(['id' => $draftProduct->id]);
     }
 }

@@ -26,6 +26,7 @@ class ProductLoader
             'image' => self::primaryImage($product),
             'category' => $categoryPayload,
             'price' => (float) $product->price,
+            'currency' => $product->currency,
             'discount_percentage' => $product->discount_percent,
             'quantity' => $product->stock,
             'related_images' => self::relatedImages($product),
