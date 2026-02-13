@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Models\User;
+use App\Support\Invoices\InvoiceStatusService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use OpenApi\Attributes as OA;
 
 class InvoiceController extends Controller
@@ -17,6 +19,7 @@ class InvoiceController extends Controller
         $this->middleware('permission:invoice.items')->only('items');
         $this->middleware('permission:invoice.detail')->only('detail');
         $this->middleware('permission:invoice.user')->only('user');
+        $this->middleware('permission:invoice.updateStatus')->only('updateStatus');
     }
 
     #[OA\Get(
@@ -109,5 +112,68 @@ class InvoiceController extends Controller
         $invoices = $user->invoices()->with(['items', 'payments'])->get();
 
         return response()->json($invoices);
+    }
+
+    #[OA\Patch(
+        path: '/api/admin/invoices/{invoice}/status',
+        operationId: 'adminInvoicesUpdateStatus',
+        summary: 'Update invoice status',
+        security: [['sanctum' => []]],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                required: ['status'],
+                properties: [
+                    new OA\Property(property: 'status', type: 'string'),
+                    new OA\Property(property: 'note', type: 'string', nullable: true),
+                ]
+            )
+        ),
+        tags: ['Admin - Invoices'],
+        parameters: [
+            new OA\Parameter(name: 'invoice', in: 'path', required: true, schema: new OA\Schema(type: 'integer')),
+        ],
+        responses: [
+            new OA\Response(response: 200, description: 'Invoice status updated', content: new OA\JsonContent(type: 'object')),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 422, description: 'Validation error'),
+        ]
+    )]
+    public function updateStatus(Request $request, Invoice $invoice): JsonResponse
+    {
+        $data = $request->validate([
+            'status' => ['required', 'string', Rule::in(InvoiceStatusService::values())],
+            'note' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $fromStatus = (string) $invoice->status;
+        $toStatus = (string) $data['status'];
+
+        abort_if(
+            ! InvoiceStatusService::canTransition($fromStatus, $toStatus),
+            422,
+            'Invoice status transition is not allowed.'
+        );
+
+        $meta = (array) ($invoice->meta ?? []);
+        $meta['admin_status_update'] = [
+            'from' => $fromStatus,
+            'to' => $toStatus,
+            'updated_by' => (int) $request->user()->id,
+            'updated_at' => now()->toAtomString(),
+        ];
+
+        if (isset($data['note']) && $data['note'] !== '') {
+            $meta['admin_status_update']['note'] = $data['note'];
+        }
+
+        $invoice->update([
+            'status' => $toStatus,
+            'meta' => $meta,
+        ]);
+
+        return response()->json(
+            $invoice->fresh()->load(['user', 'items', 'payments', 'tags', 'categories'])
+        );
     }
 }

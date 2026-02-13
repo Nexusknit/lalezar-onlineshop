@@ -43,6 +43,7 @@ Route::post('/auth/verify', [AuthController::class, 'verify'])
 
 Route::post('/cart/check', [CartController::class, 'check'])->name('cart.check');
 Route::post('/cart/coupon', [CouponController::class, 'preview'])->name('cart.coupon');
+Route::match(['get', 'post'], '/payments/callback', [PaymentController::class, 'callback'])->name('payments.callback');
 
 Route::prefix('home')
     ->as('home.')
@@ -95,6 +96,8 @@ Route::prefix('user')
         Route::get('/invoices/{invoice}', [\App\Http\Controllers\User\InvoiceController::class, 'show'])->name('invoices.show');
 
         Route::post('/checkout', [PaymentController::class, 'checkout'])->name('checkout');
+        Route::post('/payments/initiate', [PaymentController::class, 'initiate'])->name('payments.initiate');
+        Route::post('/payments/{payment}/verify', [PaymentController::class, 'verify'])->name('payments.verify');
     });
 
 Route::prefix('admin')
@@ -181,6 +184,7 @@ Route::prefix('admin')
         Route::get('/invoices', [InvoiceController::class, 'all'])->name('invoices.index');
         Route::get('/invoices/{invoice}', [InvoiceController::class, 'detail'])->name('invoices.show');
         Route::get('/invoices/{invoice}/items', [InvoiceController::class, 'items'])->name('invoices.items');
+        Route::patch('/invoices/{invoice}/status', [InvoiceController::class, 'updateStatus'])->name('invoices.status.update');
         Route::get('/users/{user}/invoices', [InvoiceController::class, 'user'])->name('users.invoices');
 
         // Relations

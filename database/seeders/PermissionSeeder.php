@@ -95,6 +95,7 @@ class PermissionSeeder extends Seeder
             'invoice.items',
             'invoice.detail',
             'invoice.user',
+            'invoice.updateStatus',
 
             // Relations
             'relation.attachCategory',

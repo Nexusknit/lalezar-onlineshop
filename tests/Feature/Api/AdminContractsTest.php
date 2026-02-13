@@ -3,9 +3,13 @@
 namespace Tests\Feature\Api;
 
 use App\Models\Category;
+use App\Models\City;
+use App\Models\Invoice;
 use App\Models\Permission;
 use App\Models\Product;
+use App\Models\State;
 use App\Models\User;
+use App\Support\Invoices\InvoiceStatusService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -285,6 +289,107 @@ class AdminContractsTest extends TestCase
 
         $this->assertNotNull($tokenRow);
         $this->assertNotNull($tokenRow->expires_at);
+    }
+
+    public function test_admin_can_update_invoice_status_when_transition_is_allowed(): void
+    {
+        $admin = $this->createUserWithPermissions('invoice.updateStatus');
+        Sanctum::actingAs($admin);
+
+        $invoice = $this->createInvoiceForStatus(InvoiceStatusService::PENDING);
+
+        $this->patchJson("/api/admin/invoices/{$invoice->id}/status", [
+            'status' => InvoiceStatusService::PAYMENT_PENDING,
+            'note' => 'Sent to payment gateway.',
+        ])
+            ->assertOk()
+            ->assertJsonPath('id', $invoice->id)
+            ->assertJsonPath('status', InvoiceStatusService::PAYMENT_PENDING)
+            ->assertJsonPath('meta.admin_status_update.from', InvoiceStatusService::PENDING)
+            ->assertJsonPath('meta.admin_status_update.to', InvoiceStatusService::PAYMENT_PENDING)
+            ->assertJsonPath('meta.admin_status_update.updated_by', $admin->id)
+            ->assertJsonPath('meta.admin_status_update.note', 'Sent to payment gateway.');
+
+        $this->assertDatabaseHas('invoices', [
+            'id' => $invoice->id,
+            'status' => InvoiceStatusService::PAYMENT_PENDING,
+        ]);
+    }
+
+    public function test_admin_invoice_status_update_requires_permission(): void
+    {
+        $admin = User::factory()->create([
+            'accessibility' => true,
+        ]);
+        Sanctum::actingAs($admin);
+
+        $invoice = $this->createInvoiceForStatus(InvoiceStatusService::PENDING);
+
+        $this->patchJson("/api/admin/invoices/{$invoice->id}/status", [
+            'status' => InvoiceStatusService::PAYMENT_PENDING,
+        ])->assertForbidden();
+    }
+
+    public function test_admin_cannot_apply_invalid_invoice_status_transition(): void
+    {
+        $admin = $this->createUserWithPermissions('invoice.updateStatus');
+        Sanctum::actingAs($admin);
+
+        $invoice = $this->createInvoiceForStatus(InvoiceStatusService::DELIVERED);
+
+        $this->patchJson("/api/admin/invoices/{$invoice->id}/status", [
+            'status' => InvoiceStatusService::PENDING,
+        ])
+            ->assertStatus(422)
+            ->assertJson([
+                'message' => 'Invoice status transition is not allowed.',
+            ]);
+
+        $this->assertDatabaseHas('invoices', [
+            'id' => $invoice->id,
+            'status' => InvoiceStatusService::DELIVERED,
+        ]);
+    }
+
+    protected function createInvoiceForStatus(string $status): Invoice
+    {
+        $user = User::factory()->create([
+            'accessibility' => true,
+        ]);
+
+        $state = State::query()->create([
+            'name' => 'Tehran',
+            'slug' => 'tehran',
+            'code' => 'THR',
+        ]);
+        $city = City::query()->create([
+            'state_id' => $state->id,
+            'name' => 'Tehran',
+            'slug' => 'tehran-city',
+            'code' => 'THR-1',
+        ]);
+
+        $address = $user->addresses()->create([
+            'city_id' => $city->id,
+            'label' => 'Home',
+            'recipient_name' => 'Ehsan',
+            'phone' => '09127776655',
+            'street_line1' => 'Valiasr St',
+            'is_default' => true,
+        ]);
+
+        return Invoice::query()->create([
+            'user_id' => $user->id,
+            'address_id' => $address->id,
+            'number' => 'INV-ADMIN-'.strtoupper((string) \Illuminate\Support\Str::random(6)),
+            'status' => $status,
+            'currency' => 'IRR',
+            'subtotal' => 100000,
+            'tax' => 0,
+            'discount' => 0,
+            'total' => 100000,
+            'issued_at' => now(),
+        ]);
     }
 
     protected function createUserWithPermissions(string ...$slugs): User

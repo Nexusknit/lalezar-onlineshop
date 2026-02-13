@@ -8,6 +8,7 @@ use App\Models\Invoice;
 use App\Models\Product;
 use App\Models\State;
 use App\Models\User;
+use App\Support\Invoices\InvoiceStatusService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
 use Laravel\Sanctum\Sanctum;
@@ -448,6 +449,152 @@ class UserCommerceFlowTest extends TestCase
             ->assertJsonPath('meta.tax', 10700);
     }
 
+    public function test_user_can_initiate_payment_and_reuse_existing_pending_payment(): void
+    {
+        $context = $this->createCheckoutInvoiceContext('09120000011');
+        $invoiceId = $context['invoice_id'];
+
+        $firstInitiate = $this->postJson('/api/user/payments/initiate', [
+            'invoice_id' => $invoiceId,
+        ]);
+
+        $firstInitiate
+            ->assertOk()
+            ->assertJsonPath('invoice.id', $invoiceId)
+            ->assertJsonPath('invoice.status', InvoiceStatusService::PAYMENT_PENDING)
+            ->assertJsonPath('payment.status', 'pending')
+            ->assertJsonPath('gateway.provider', 'mock_gateway');
+
+        $paymentId = (int) $firstInitiate->json('payment.id');
+        $authority = (string) $firstInitiate->json('gateway.authority');
+        $callbackToken = (string) $firstInitiate->json('gateway.callback_token');
+        $redirectUrl = (string) $firstInitiate->json('gateway.redirect_url');
+
+        $this->assertNotSame('', $authority);
+        $this->assertNotSame('', $callbackToken);
+        $this->assertStringContainsString('/api/payments/callback', $redirectUrl);
+
+        $secondInitiate = $this->postJson('/api/user/payments/initiate', [
+            'invoice_id' => $invoiceId,
+        ]);
+
+        $secondInitiate
+            ->assertOk()
+            ->assertJsonPath('message', 'Existing pending payment reused.')
+            ->assertJsonPath('payment.id', $paymentId)
+            ->assertJsonPath('payment.status', 'pending');
+
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseHas('invoices', [
+            'id' => $invoiceId,
+            'status' => InvoiceStatusService::PAYMENT_PENDING,
+        ]);
+    }
+
+    public function test_user_can_verify_payment_success_and_invoice_becomes_paid(): void
+    {
+        $context = $this->createCheckoutInvoiceContext('09120000012');
+        $invoiceId = $context['invoice_id'];
+
+        $initiateResponse = $this->postJson('/api/user/payments/initiate', [
+            'invoice_id' => $invoiceId,
+        ])->assertOk();
+
+        $paymentId = (int) $initiateResponse->json('payment.id');
+
+        $this->postJson("/api/user/payments/{$paymentId}/verify", [
+            'status' => 'success',
+            'reference' => 'REF-PAID-001',
+        ])
+            ->assertOk()
+            ->assertJsonPath('payment.id', $paymentId)
+            ->assertJsonPath('payment.status', 'paid')
+            ->assertJsonPath('invoice.id', $invoiceId)
+            ->assertJsonPath('invoice.status', InvoiceStatusService::PAID);
+
+        $this->assertDatabaseHas('payments', [
+            'id' => $paymentId,
+            'status' => 'paid',
+            'reference' => 'REF-PAID-001',
+        ]);
+
+        $this->assertDatabaseHas('invoices', [
+            'id' => $invoiceId,
+            'status' => InvoiceStatusService::PAID,
+        ]);
+    }
+
+    public function test_user_cannot_verify_another_users_payment(): void
+    {
+        $context = $this->createCheckoutInvoiceContext('09120000013');
+        $invoiceId = $context['invoice_id'];
+
+        $initiateResponse = $this->postJson('/api/user/payments/initiate', [
+            'invoice_id' => $invoiceId,
+        ])->assertOk();
+
+        $paymentId = (int) $initiateResponse->json('payment.id');
+
+        $otherUser = User::factory()->create([
+            'phone' => '09120000014',
+            'accessibility' => true,
+        ]);
+        Sanctum::actingAs($otherUser);
+
+        $this->postJson("/api/user/payments/{$paymentId}/verify", [
+            'status' => 'success',
+        ])->assertNotFound();
+
+        $this->assertDatabaseHas('payments', [
+            'id' => $paymentId,
+            'status' => 'pending',
+        ]);
+    }
+
+    public function test_payment_callback_validates_token_and_can_mark_payment_as_failed(): void
+    {
+        $context = $this->createCheckoutInvoiceContext('09120000015');
+        $invoiceId = $context['invoice_id'];
+
+        $initiateResponse = $this->postJson('/api/user/payments/initiate', [
+            'invoice_id' => $invoiceId,
+        ])->assertOk();
+
+        $paymentId = (int) $initiateResponse->json('payment.id');
+        $authority = (string) $initiateResponse->json('gateway.authority');
+        $callbackToken = (string) $initiateResponse->json('gateway.callback_token');
+
+        $this->postJson('/api/payments/callback', [
+            'payment_id' => $paymentId,
+            'status' => 'failed',
+            'authority' => $authority,
+            'token' => 'invalid-token',
+        ])->assertStatus(422);
+
+        $this->postJson('/api/payments/callback', [
+            'payment_id' => $paymentId,
+            'status' => 'failed',
+            'authority' => $authority,
+            'token' => $callbackToken,
+            'reason' => 'gateway_timeout',
+        ])
+            ->assertOk()
+            ->assertJsonPath('payment.id', $paymentId)
+            ->assertJsonPath('payment.status', 'failed')
+            ->assertJsonPath('invoice.id', $invoiceId)
+            ->assertJsonPath('invoice.status', InvoiceStatusService::PAYMENT_FAILED);
+
+        $this->assertDatabaseHas('payments', [
+            'id' => $paymentId,
+            'status' => 'failed',
+        ]);
+
+        $this->assertDatabaseHas('invoices', [
+            'id' => $invoiceId,
+            'status' => InvoiceStatusService::PAYMENT_FAILED,
+        ]);
+    }
+
     public function test_authenticated_user_can_list_and_view_only_own_invoices(): void
     {
         $user = User::factory()->create([
@@ -533,5 +680,68 @@ class UserCommerceFlowTest extends TestCase
 
         $this->getJson("/api/user/invoices/{$otherInvoice->id}")
             ->assertNotFound();
+    }
+
+    /**
+     * @return array{user:User,invoice_id:int}
+     */
+    protected function createCheckoutInvoiceContext(string $phone): array
+    {
+        $user = User::factory()->create([
+            'phone' => $phone,
+            'accessibility' => true,
+        ]);
+        Sanctum::actingAs($user);
+
+        $state = State::query()->create([
+            'name' => 'Tehran',
+            'slug' => 'tehran',
+            'code' => 'THR',
+        ]);
+        $city = City::query()->create([
+            'state_id' => $state->id,
+            'name' => 'Tehran',
+            'slug' => 'tehran-city',
+            'code' => 'THR-1',
+        ]);
+
+        $addressResponse = $this->postJson('/api/user/addresses', [
+            'city_id' => $city->id,
+            'label' => 'Home',
+            'recipient_name' => 'Ehsan',
+            'phone' => $phone,
+            'street_line1' => 'Valiasr St',
+            'is_default' => true,
+        ]);
+        $addressResponse->assertCreated();
+        $addressId = (int) $addressResponse->json('id');
+
+        $creator = User::factory()->create();
+        $product = Product::query()->create([
+            'creator_id' => $creator->id,
+            'name' => "Payment Product {$phone}",
+            'slug' => "payment-product-{$phone}",
+            'sku' => "PAY-{$phone}",
+            'stock' => 10,
+            'price' => 100000,
+            'currency' => 'IRR',
+            'status' => 'active',
+        ]);
+
+        $checkoutResponse = $this->postJson('/api/user/checkout', [
+            'address_id' => $addressId,
+            'items' => [
+                [
+                    'product_id' => $product->id,
+                    'quantity' => 1,
+                ],
+            ],
+        ]);
+        $checkoutResponse->assertOk();
+
+        return [
+            'user' => $user,
+            'invoice_id' => (int) $checkoutResponse->json('id'),
+        ];
     }
 }
