@@ -9,6 +9,7 @@ use App\Models\Product;
 use App\Models\State;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Config;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -323,7 +324,7 @@ class UserCommerceFlowTest extends TestCase
         ]);
     }
 
-    public function test_checkout_includes_shipping_and_tax_in_total(): void
+    public function test_checkout_rejects_client_supplied_shipping_and_tax_fields(): void
     {
         $user = User::factory()->create([
             'phone' => '09120000006',
@@ -377,13 +378,74 @@ class UserCommerceFlowTest extends TestCase
                 ],
             ],
         ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['shipping', 'tax']);
+    }
+
+    public function test_checkout_applies_server_side_shipping_and_tax_policy(): void
+    {
+        Config::set('checkout.shipping.flat_fee', 7000);
+        Config::set('checkout.shipping.free_threshold', null);
+        Config::set('checkout.tax.enabled', true);
+        Config::set('checkout.tax.rate_percent', 10);
+
+        $user = User::factory()->create([
+            'phone' => '09120000010',
+            'accessibility' => true,
+        ]);
+        Sanctum::actingAs($user);
+
+        $state = State::query()->create([
+            'name' => 'Tehran',
+            'slug' => 'tehran',
+            'code' => 'THR',
+        ]);
+        $city = City::query()->create([
+            'state_id' => $state->id,
+            'name' => 'Tehran',
+            'slug' => 'tehran-city',
+            'code' => 'THR-1',
+        ]);
+
+        $addressResponse = $this->postJson('/api/user/addresses', [
+            'city_id' => $city->id,
+            'label' => 'Home',
+            'recipient_name' => 'Ehsan',
+            'phone' => '09120000010',
+            'street_line1' => 'Valiasr St',
+            'is_default' => true,
+        ]);
+        $addressResponse->assertCreated();
+        $addressId = (int) $addressResponse->json('id');
+
+        $creator = User::factory()->create();
+        $product = Product::query()->create([
+            'creator_id' => $creator->id,
+            'name' => 'Server Pricing Product',
+            'slug' => 'server-pricing-product',
+            'sku' => 'SRV-PRC-001',
+            'stock' => 5,
+            'price' => 100000,
+            'currency' => 'IRR',
+            'status' => 'active',
+        ]);
+
+        $this->postJson('/api/user/checkout', [
+            'address_id' => $addressId,
+            'items' => [
+                [
+                    'product_id' => $product->id,
+                    'quantity' => 1,
+                ],
+            ],
+        ])
             ->assertOk()
             ->assertJsonPath('subtotal', '100000.00')
             ->assertJsonPath('discount', '0.00')
-            ->assertJsonPath('tax', '1000.00')
-            ->assertJsonPath('total', '108000.00')
+            ->assertJsonPath('tax', '10700.00')
+            ->assertJsonPath('total', '117700.00')
             ->assertJsonPath('meta.shipping', 7000)
-            ->assertJsonPath('meta.tax', 1000);
+            ->assertJsonPath('meta.tax', 10700);
     }
 
     public function test_authenticated_user_can_list_and_view_only_own_invoices(): void

@@ -7,6 +7,7 @@ use App\Models\CouponUsage;
 use App\Models\Invoice;
 use App\Models\Item;
 use App\Models\Product;
+use App\Support\Checkout\CheckoutPricingService;
 use App\Support\Coupons\CouponService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -33,8 +34,6 @@ class PaymentController extends Controller
                 properties: [
                     new OA\Property(property: 'address_id', type: 'integer', example: 3),
                     new OA\Property(property: 'coupon_code', type: 'string', nullable: true, example: 'WELCOME10'),
-                    new OA\Property(property: 'shipping', type: 'number', format: 'float', nullable: true, example: 70000),
-                    new OA\Property(property: 'tax', type: 'number', format: 'float', nullable: true, example: 0),
                     new OA\Property(
                         property: 'items',
                         type: 'array',
@@ -66,8 +65,8 @@ class PaymentController extends Controller
         $data = $request->validate([
             'address_id' => ['required', 'integer'],
             'coupon_code' => ['nullable', 'string', 'max:64'],
-            'shipping' => ['nullable', 'numeric', 'min:0'],
-            'tax' => ['nullable', 'numeric', 'min:0'],
+            'shipping' => ['prohibited'],
+            'tax' => ['prohibited'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'integer', 'distinct'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
@@ -136,9 +135,10 @@ class PaymentController extends Controller
             }
 
             $total = round(max(0, (float) $subtotal - $discount), 2);
-            $shipping = round(max(0, (float) ($data['shipping'] ?? 0)), 2);
-            $tax = round(max(0, (float) ($data['tax'] ?? 0)), 2);
-            $grandTotal = round(max(0, $total + $shipping + $tax), 2);
+            $pricing = CheckoutPricingService::calculate($total);
+            $shipping = $pricing['shipping'];
+            $tax = $pricing['tax'];
+            $grandTotal = $pricing['total'];
 
             $meta = $coupon ? [
                 'coupon' => [
