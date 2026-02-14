@@ -8,9 +8,11 @@ use App\Models\Invoice;
 use App\Models\Product;
 use App\Models\State;
 use App\Models\User;
+use App\Support\Payments\PaymentGatewayService;
 use App\Support\Invoices\InvoiceStatusService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Http;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -595,6 +597,226 @@ class UserCommerceFlowTest extends TestCase
         ]);
     }
 
+    public function test_failed_payment_releases_stock_and_coupon_usage(): void
+    {
+        $context = $this->createCheckoutInvoiceContextWithCoupon('09120000150');
+        $invoiceId = $context['invoice_id'];
+        $productId = $context['product_id'];
+        $couponId = $context['coupon_id'];
+
+        $initiateResponse = $this->postJson('/api/user/payments/initiate', [
+            'invoice_id' => $invoiceId,
+        ])->assertOk();
+
+        $paymentId = (int) $initiateResponse->json('payment.id');
+        $authority = (string) $initiateResponse->json('gateway.authority');
+        $callbackToken = (string) $initiateResponse->json('gateway.callback_token');
+
+        $this->postJson('/api/payments/callback', [
+            'payment_id' => $paymentId,
+            'status' => 'failed',
+            'authority' => $authority,
+            'token' => $callbackToken,
+            'reason' => 'gateway_timeout',
+        ])
+            ->assertOk()
+            ->assertJsonPath('payment.status', 'failed')
+            ->assertJsonPath('invoice.status', InvoiceStatusService::PAYMENT_FAILED);
+
+        $this->assertDatabaseHas('products', [
+            'id' => $productId,
+            'stock' => 10,
+            'sold_count' => 0,
+        ]);
+
+        $this->assertDatabaseMissing('coupon_usages', [
+            'invoice_id' => $invoiceId,
+            'coupon_id' => $couponId,
+        ]);
+
+        $this->assertDatabaseHas('coupons', [
+            'id' => $couponId,
+            'used_count' => 0,
+        ]);
+
+        $invoice = Invoice::query()->findOrFail($invoiceId);
+        $allocationMeta = (array) data_get((array) $invoice->meta, 'allocation', []);
+        $this->assertNotEmpty($allocationMeta['released_at'] ?? null);
+    }
+
+    public function test_retry_payment_after_failure_re_reserves_stock_and_coupon_usage(): void
+    {
+        $context = $this->createCheckoutInvoiceContextWithCoupon('09120000151');
+        $invoiceId = $context['invoice_id'];
+        $productId = $context['product_id'];
+        $couponId = $context['coupon_id'];
+
+        $firstInitiate = $this->postJson('/api/user/payments/initiate', [
+            'invoice_id' => $invoiceId,
+        ])->assertOk();
+
+        $firstPaymentId = (int) $firstInitiate->json('payment.id');
+        $firstAuthority = (string) $firstInitiate->json('gateway.authority');
+        $firstToken = (string) $firstInitiate->json('gateway.callback_token');
+
+        $this->postJson('/api/payments/callback', [
+            'payment_id' => $firstPaymentId,
+            'status' => 'failed',
+            'authority' => $firstAuthority,
+            'token' => $firstToken,
+            'reason' => 'temporary_gateway_error',
+        ])->assertOk();
+
+        $retryInitiate = $this->postJson('/api/user/payments/initiate', [
+            'invoice_id' => $invoiceId,
+        ]);
+
+        $retryInitiate
+            ->assertOk()
+            ->assertJsonPath('invoice.status', InvoiceStatusService::PAYMENT_PENDING)
+            ->assertJsonPath('payment.status', 'pending');
+
+        $retryPaymentId = (int) $retryInitiate->json('payment.id');
+        $this->assertNotSame($firstPaymentId, $retryPaymentId);
+
+        $this->assertDatabaseHas('products', [
+            'id' => $productId,
+            'stock' => 9,
+            'sold_count' => 1,
+        ]);
+
+        $this->assertDatabaseHas('coupon_usages', [
+            'invoice_id' => $invoiceId,
+            'coupon_id' => $couponId,
+        ]);
+
+        $this->assertDatabaseHas('coupons', [
+            'id' => $couponId,
+            'used_count' => 1,
+        ]);
+
+        $this->postJson("/api/user/payments/{$retryPaymentId}/verify", [
+            'status' => 'success',
+            'reference' => 'REF-RETRY-PAID-001',
+        ])
+            ->assertOk()
+            ->assertJsonPath('payment.id', $retryPaymentId)
+            ->assertJsonPath('payment.status', 'paid')
+            ->assertJsonPath('invoice.status', InvoiceStatusService::PAID);
+
+        $this->assertDatabaseHas('invoices', [
+            'id' => $invoiceId,
+            'status' => InvoiceStatusService::PAID,
+        ]);
+
+        $this->assertDatabaseHas('products', [
+            'id' => $productId,
+            'stock' => 9,
+            'sold_count' => 1,
+        ]);
+    }
+
+    public function test_user_can_initiate_payment_with_zarinpal_when_configured(): void
+    {
+        $context = $this->createCheckoutInvoiceContext('09120000152');
+        $invoiceId = $context['invoice_id'];
+
+        Config::set('payment.providers.zarinpal.enabled', true);
+        Config::set('payment.providers.zarinpal.merchant_id', 'test-merchant-id');
+        Config::set('payment.providers.zarinpal.sandbox', true);
+        Config::set('payment.default_provider', PaymentGatewayService::PROVIDER_ZARINPAL);
+
+        Http::fake([
+            'https://sandbox.zarinpal.com/pg/v4/payment/request.json' => Http::response([
+                'data' => [
+                    'code' => 100,
+                    'message' => 'Success',
+                    'authority' => 'A000000000000000000000000000000000',
+                ],
+                'errors' => [],
+            ], 200),
+        ]);
+
+        $response = $this->postJson('/api/user/payments/initiate', [
+            'invoice_id' => $invoiceId,
+            'method' => PaymentGatewayService::PROVIDER_ZARINPAL,
+        ]);
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('invoice.id', $invoiceId)
+            ->assertJsonPath('invoice.status', InvoiceStatusService::PAYMENT_PENDING)
+            ->assertJsonPath('payment.status', 'pending')
+            ->assertJsonPath('payment.method', PaymentGatewayService::PROVIDER_ZARINPAL)
+            ->assertJsonPath('gateway.provider', PaymentGatewayService::PROVIDER_ZARINPAL)
+            ->assertJsonPath('gateway.authority', 'A000000000000000000000000000000000')
+            ->assertJsonPath(
+                'gateway.redirect_url',
+                'https://sandbox.zarinpal.com/pg/StartPay/A000000000000000000000000000000000'
+            );
+
+        Http::assertSentCount(1);
+        $this->assertDatabaseHas('payments', [
+            'invoice_id' => $invoiceId,
+            'status' => 'pending',
+            'method' => PaymentGatewayService::PROVIDER_ZARINPAL,
+            'reference' => 'A000000000000000000000000000000000',
+        ]);
+    }
+
+    public function test_zarinpal_callback_can_mark_payment_as_paid_after_gateway_verify(): void
+    {
+        $context = $this->createCheckoutInvoiceContext('09120000153');
+        $invoiceId = $context['invoice_id'];
+
+        Config::set('payment.providers.zarinpal.enabled', true);
+        Config::set('payment.providers.zarinpal.merchant_id', 'test-merchant-id');
+        Config::set('payment.providers.zarinpal.sandbox', true);
+        Config::set('payment.default_provider', PaymentGatewayService::PROVIDER_ZARINPAL);
+
+        Http::fake([
+            'https://sandbox.zarinpal.com/pg/v4/payment/request.json' => Http::response([
+                'data' => [
+                    'code' => 100,
+                    'message' => 'Success',
+                    'authority' => 'B000000000000000000000000000000000',
+                ],
+                'errors' => [],
+            ], 200),
+            'https://sandbox.zarinpal.com/pg/v4/payment/verify.json' => Http::response([
+                'data' => [
+                    'code' => 100,
+                    'message' => 'Verified',
+                    'ref_id' => '7788990011',
+                ],
+                'errors' => [],
+            ], 200),
+        ]);
+
+        $initiate = $this->postJson('/api/user/payments/initiate', [
+            'invoice_id' => $invoiceId,
+            'method' => PaymentGatewayService::PROVIDER_ZARINPAL,
+        ])->assertOk();
+
+        $paymentId = (int) $initiate->json('payment.id');
+        $callbackToken = (string) $initiate->json('gateway.callback_token');
+
+        $this->getJson('/api/payments/callback?'.http_build_query([
+            'payment_id' => $paymentId,
+            'Authority' => 'B000000000000000000000000000000000',
+            'Status' => 'OK',
+            'token' => $callbackToken,
+        ]))
+            ->assertOk()
+            ->assertJsonPath('payment.id', $paymentId)
+            ->assertJsonPath('payment.status', 'paid')
+            ->assertJsonPath('payment.reference', '7788990011')
+            ->assertJsonPath('invoice.id', $invoiceId)
+            ->assertJsonPath('invoice.status', InvoiceStatusService::PAID);
+
+        Http::assertSentCount(2);
+    }
+
     public function test_authenticated_user_can_list_and_view_only_own_invoices(): void
     {
         $user = User::factory()->create([
@@ -742,6 +964,83 @@ class UserCommerceFlowTest extends TestCase
         return [
             'user' => $user,
             'invoice_id' => (int) $checkoutResponse->json('id'),
+        ];
+    }
+
+    /**
+     * @return array{user:User,invoice_id:int,product_id:int,coupon_id:int}
+     */
+    protected function createCheckoutInvoiceContextWithCoupon(string $phone): array
+    {
+        $user = User::factory()->create([
+            'phone' => $phone,
+            'accessibility' => true,
+        ]);
+        Sanctum::actingAs($user);
+
+        $state = State::query()->create([
+            'name' => 'Tehran',
+            'slug' => 'tehran',
+            'code' => 'THR',
+        ]);
+        $city = City::query()->create([
+            'state_id' => $state->id,
+            'name' => 'Tehran',
+            'slug' => 'tehran-city',
+            'code' => 'THR-1',
+        ]);
+
+        $addressResponse = $this->postJson('/api/user/addresses', [
+            'city_id' => $city->id,
+            'label' => 'Home',
+            'recipient_name' => 'Ehsan',
+            'phone' => $phone,
+            'street_line1' => 'Valiasr St',
+            'is_default' => true,
+        ]);
+        $addressResponse->assertCreated();
+        $addressId = (int) $addressResponse->json('id');
+
+        $creator = User::factory()->create();
+        $product = Product::query()->create([
+            'creator_id' => $creator->id,
+            'name' => "Coupon Payment Product {$phone}",
+            'slug' => "coupon-payment-product-{$phone}",
+            'sku' => "CPAY-{$phone}",
+            'stock' => 10,
+            'price' => 100000,
+            'currency' => 'IRR',
+            'status' => 'active',
+        ]);
+
+        $coupon = Coupon::query()->create([
+            'code' => "CPN{$phone}",
+            'discount_type' => 'fixed',
+            'discount_value' => 10000,
+            'min_subtotal' => 50000,
+            'currency' => 'IRR',
+            'max_uses' => 50,
+            'max_uses_per_user' => 5,
+            'status' => 'active',
+        ]);
+
+        $checkoutResponse = $this->postJson('/api/user/checkout', [
+            'address_id' => $addressId,
+            'coupon_code' => $coupon->code,
+            'items' => [
+                [
+                    'product_id' => $product->id,
+                    'quantity' => 1,
+                ],
+            ],
+        ]);
+        $checkoutResponse->assertOk();
+
+        return [
+            'user' => $user,
+            'invoice_id' => (int) $checkoutResponse->json('id'),
+            'product_id' => (int) $product->id,
+            'coupon_id' => (int) $coupon->id,
         ];
     }
 }

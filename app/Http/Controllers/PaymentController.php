@@ -10,17 +10,23 @@ use App\Models\Payment;
 use App\Models\Product;
 use App\Support\Checkout\CheckoutPricingService;
 use App\Support\Coupons\CouponService;
+use App\Support\Invoices\InvoiceAllocationService;
 use App\Support\Invoices\InvoiceStatusService;
+use App\Support\Payments\PaymentGatewayService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use OpenApi\Attributes as OA;
 
 class PaymentController extends Controller
 {
-    public function __construct()
+    public function __construct(
+        protected InvoiceAllocationService $invoiceAllocationService,
+        protected PaymentGatewayService $paymentGatewayService
+    )
     {
         $this->middleware('auth:sanctum')->except('callback');
     }
@@ -155,6 +161,10 @@ class PaymentController extends Controller
 
             $meta['shipping'] = $shipping;
             $meta['tax'] = $tax;
+            $meta['allocation'] = [
+                'reserved_at' => now()->toAtomString(),
+                'last_action' => 'reserved',
+            ];
 
             $invoice = Invoice::query()->create([
                 'user_id' => $user->id,
@@ -228,8 +238,11 @@ class PaymentController extends Controller
         ]);
 
         $user = $request->user();
+        $provider = $this->paymentGatewayService->resolveProvider(
+            isset($data['method']) ? (string) $data['method'] : null
+        );
 
-        $result = DB::transaction(function () use ($data, $user) {
+        $result = DB::transaction(function () use ($data, $user, $provider) {
             /** @var Invoice|null $invoice */
             $invoice = Invoice::query()
                 ->where('id', $data['invoice_id'])
@@ -252,6 +265,12 @@ class PaymentController extends Controller
                 'Invoice cannot be paid in its current status.'
             );
 
+            $reservedForRetry = false;
+            if ($status === InvoiceStatusService::PAYMENT_FAILED) {
+                $this->invoiceAllocationService->reserveForRetry($invoice);
+                $reservedForRetry = true;
+            }
+
             /** @var Payment|null $pendingPayment */
             $pendingPayment = Payment::query()
                 ->where('invoice_id', $invoice->id)
@@ -261,10 +280,18 @@ class PaymentController extends Controller
                 ->first();
 
             if ($pendingPayment) {
+                if ((string) $invoice->status !== InvoiceStatusService::PAYMENT_PENDING) {
+                    $invoice->update([
+                        'status' => InvoiceStatusService::PAYMENT_PENDING,
+                    ]);
+                }
+
                 return [
                     'invoice' => $invoice,
                     'payment' => $pendingPayment,
                     'created' => false,
+                    'previous_status' => $status,
+                    'reserved_for_retry' => $reservedForRetry,
                 ];
             }
 
@@ -274,21 +301,18 @@ class PaymentController extends Controller
                 'Invoice status transition is not allowed.'
             );
 
-            $authority = $this->generatePaymentAuthority();
             $callbackToken = Str::random(40);
-            $method = trim((string) ($data['method'] ?? 'mock_gateway')) ?: 'mock_gateway';
 
             $payment = Payment::query()->create([
                 'invoice_id' => $invoice->id,
                 'user_id' => $invoice->user_id,
                 'amount' => $invoice->total,
                 'currency' => $invoice->currency,
-                'method' => $method,
+                'method' => $provider,
                 'status' => 'pending',
-                'reference' => $authority,
+                'reference' => null,
                 'meta' => [
-                    'gateway' => 'mock_gateway',
-                    'authority' => $authority,
+                    'gateway' => $provider,
                     'callback_token' => $callbackToken,
                 ],
             ]);
@@ -301,6 +325,8 @@ class PaymentController extends Controller
                 'invoice' => $invoice,
                 'payment' => $payment,
                 'created' => true,
+                'previous_status' => $status,
+                'reserved_for_retry' => $reservedForRetry,
             ];
         });
 
@@ -308,16 +334,68 @@ class PaymentController extends Controller
         $invoice = $result['invoice'];
         /** @var Payment $payment */
         $payment = $result['payment'];
+        $previousStatus = (string) ($result['previous_status'] ?? InvoiceStatusService::PENDING);
+        $reservedForRetry = (bool) ($result['reserved_for_retry'] ?? false);
+        $gateway = $this->paymentGatewayService->buildGatewayPayload($payment);
 
-        $meta = (array) ($payment->meta ?? []);
-        $authority = (string) data_get($meta, 'authority', $payment->reference);
-        $callbackToken = (string) data_get($meta, 'callback_token');
-        $redirectUrl = $this->buildMockGatewayCallbackUrl(
-            $payment->id,
-            $authority,
-            $callbackToken,
-            'success'
-        );
+        if ((bool) $result['created']) {
+            try {
+                $gateway = $this->paymentGatewayService->initiate($payment, $invoice);
+            } catch (ValidationException $validationException) {
+                DB::transaction(function () use ($payment, $invoice, $previousStatus, $reservedForRetry): void {
+                    /** @var Payment|null $lockedPayment */
+                    $lockedPayment = Payment::query()->whereKey($payment->id)->lockForUpdate()->first();
+                    /** @var Invoice|null $lockedInvoice */
+                    $lockedInvoice = Invoice::query()->whereKey($invoice->id)->lockForUpdate()->first();
+
+                    if ($lockedPayment) {
+                        $paymentMeta = (array) ($lockedPayment->meta ?? []);
+                        $paymentMeta['initiation_error'] = 'gateway_init_failed';
+
+                        $lockedPayment->update([
+                            'status' => 'failed',
+                            'meta' => $paymentMeta,
+                        ]);
+                    }
+
+                    if ($lockedInvoice) {
+                        $lockedInvoice->update([
+                            'status' => $previousStatus,
+                        ]);
+
+                        if ($reservedForRetry && $previousStatus === InvoiceStatusService::PAYMENT_FAILED) {
+                            $this->invoiceAllocationService->releaseForFailedPayment(
+                                $lockedInvoice,
+                                'gateway_initiation_failed'
+                            );
+                        }
+                    }
+                });
+
+                throw $validationException;
+            }
+
+            DB::transaction(function () use ($payment, $gateway): void {
+                /** @var Payment|null $lockedPayment */
+                $lockedPayment = Payment::query()->whereKey($payment->id)->lockForUpdate()->first();
+                if (! $lockedPayment) {
+                    return;
+                }
+
+                $meta = (array) ($lockedPayment->meta ?? []);
+                $gatewayMeta = (array) ($gateway['meta'] ?? []);
+                $meta = array_merge($meta, $gatewayMeta);
+
+                $authority = trim((string) ($gateway['authority'] ?? ''));
+                $lockedPayment->update([
+                    'reference' => $authority !== '' ? $authority : $lockedPayment->reference,
+                    'meta' => $meta,
+                ]);
+            });
+
+            $payment = $payment->fresh();
+            $gateway = $this->paymentGatewayService->buildGatewayPayload($payment);
+        }
 
         return response()->json([
             'message' => $result['created']
@@ -325,12 +403,7 @@ class PaymentController extends Controller
                 : 'Existing pending payment reused.',
             'invoice' => $this->loadInvoicePayload($invoice),
             'payment' => $payment->fresh(),
-            'gateway' => [
-                'provider' => 'mock_gateway',
-                'authority' => $authority,
-                'callback_token' => $callbackToken,
-                'redirect_url' => $redirectUrl,
-            ],
+            'gateway' => $gateway,
         ]);
     }
 
@@ -368,19 +441,52 @@ class PaymentController extends Controller
     {
         $data = $request->validate([
             'payment_id' => ['required', 'integer', Rule::exists('payments', 'id')],
-            'status' => ['required', Rule::in(['success', 'failed'])],
-            'authority' => ['required', 'string', 'max:100'],
+            'status' => ['nullable', 'string', 'max:50'],
+            'gateway_status' => ['nullable', 'string', 'max:50'],
+            'Status' => ['nullable', 'string', 'max:50'],
+            'authority' => ['nullable', 'string', 'max:100'],
+            'Authority' => ['nullable', 'string', 'max:100'],
             'token' => ['required', 'string', 'max:100'],
             'reference' => ['nullable', 'string', 'max:100'],
             'reason' => ['nullable', 'string', 'max:255'],
         ]);
 
+        /** @var Payment|null $payment */
+        $payment = Payment::query()
+            ->whereKey((int) $data['payment_id'])
+            ->first();
+        abort_if(! $payment, 404, 'Payment not found.');
+
+        /** @var Invoice|null $invoice */
+        $invoice = Invoice::query()
+            ->whereKey($payment->invoice_id)
+            ->first();
+        abort_if(! $invoice, 422, 'Invoice not found for payment.');
+
+        $authority = trim((string) ($data['authority'] ?? $data['Authority'] ?? ''));
+        $statusInput = trim((string) ($data['status'] ?? $data['gateway_status'] ?? $data['Status'] ?? ''));
+
+        $outcome = $this->paymentGatewayService->resolveCallbackOutcome(
+            $payment,
+            $invoice,
+            $authority !== '' ? $authority : null,
+            $statusInput !== '' ? $statusInput : null
+        );
+
+        $normalizedStatus = (string) ($outcome['status'] ?? 'failed');
+        $normalizedReference = isset($data['reference']) && trim((string) $data['reference']) !== ''
+            ? trim((string) $data['reference'])
+            : (isset($outcome['reference']) ? trim((string) $outcome['reference']) : null);
+        $normalizedReason = isset($data['reason']) && trim((string) $data['reason']) !== ''
+            ? trim((string) $data['reason'])
+            : (isset($outcome['reason']) ? trim((string) $outcome['reason']) : null);
+
         $result = $this->finalizePayment(
             paymentId: (int) $data['payment_id'],
-            status: $data['status'],
-            authority: trim((string) $data['authority']),
-            reference: isset($data['reference']) ? trim((string) $data['reference']) : null,
-            reason: isset($data['reason']) ? trim((string) $data['reason']) : null,
+            status: $normalizedStatus,
+            authority: $authority !== '' ? $authority : null,
+            reference: $normalizedReference !== null && $normalizedReference !== '' ? $normalizedReference : null,
+            reason: $normalizedReason !== null && $normalizedReason !== '' ? $normalizedReason : null,
             callbackToken: trim((string) $data['token']),
             requireCallbackToken: true
         );
@@ -492,6 +598,11 @@ class PaymentController extends Controller
                 'meta' => $invoiceMeta,
             ]);
 
+            if ($targetInvoiceStatus === InvoiceStatusService::PAYMENT_FAILED) {
+                $this->invoiceAllocationService->releaseForFailedPayment($invoice, $reason);
+                $invoice = $invoice->fresh();
+            }
+
             return [
                 'payment' => $payment->fresh(),
                 'invoice' => $this->loadInvoicePayload($invoice),
@@ -513,24 +624,5 @@ class PaymentController extends Controller
     protected function generateInvoiceNumber(): string
     {
         return 'INV-'.now()->format('YmdHis').'-'.Str::upper(Str::random(4));
-    }
-
-    protected function generatePaymentAuthority(): string
-    {
-        return 'AUTH-'.Str::upper(Str::random(16));
-    }
-
-    protected function buildMockGatewayCallbackUrl(
-        int $paymentId,
-        string $authority,
-        string $callbackToken,
-        string $status
-    ): string {
-        return url('/api/payments/callback').'?'.http_build_query([
-            'payment_id' => $paymentId,
-            'authority' => $authority,
-            'token' => $callbackToken,
-            'status' => $status,
-        ]);
     }
 }

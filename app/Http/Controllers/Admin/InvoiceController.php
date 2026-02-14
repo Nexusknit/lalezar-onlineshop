@@ -5,15 +5,19 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Models\User;
+use App\Support\Invoices\InvoiceAllocationService;
 use App\Support\Invoices\InvoiceStatusService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use OpenApi\Attributes as OA;
 
 class InvoiceController extends Controller
 {
-    public function __construct()
+    public function __construct(
+        protected InvoiceAllocationService $invoiceAllocationService
+    )
     {
         $this->middleware('permission:invoice.all')->only('all');
         $this->middleware('permission:invoice.items')->only('items');
@@ -146,34 +150,58 @@ class InvoiceController extends Controller
             'note' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $fromStatus = (string) $invoice->status;
-        $toStatus = (string) $data['status'];
+        /** @var Invoice $updatedInvoice */
+        $updatedInvoice = DB::transaction(function () use ($invoice, $data, $request): Invoice {
+            /** @var Invoice|null $lockedInvoice */
+            $lockedInvoice = Invoice::query()
+                ->whereKey($invoice->id)
+                ->lockForUpdate()
+                ->first();
+            abort_if(! $lockedInvoice, 404, 'Invoice not found.');
 
-        abort_if(
-            ! InvoiceStatusService::canTransition($fromStatus, $toStatus),
-            422,
-            'Invoice status transition is not allowed.'
-        );
+            $fromStatus = (string) $lockedInvoice->status;
+            $toStatus = (string) $data['status'];
 
-        $meta = (array) ($invoice->meta ?? []);
-        $meta['admin_status_update'] = [
-            'from' => $fromStatus,
-            'to' => $toStatus,
-            'updated_by' => (int) $request->user()->id,
-            'updated_at' => now()->toAtomString(),
-        ];
+            abort_if(
+                ! InvoiceStatusService::canTransition($fromStatus, $toStatus),
+                422,
+                'Invoice status transition is not allowed.'
+            );
 
-        if (isset($data['note']) && $data['note'] !== '') {
-            $meta['admin_status_update']['note'] = $data['note'];
-        }
+            if (
+                $fromStatus === InvoiceStatusService::PAYMENT_FAILED &&
+                $toStatus === InvoiceStatusService::PAYMENT_PENDING
+            ) {
+                $this->invoiceAllocationService->reserveForRetry($lockedInvoice);
+            }
 
-        $invoice->update([
-            'status' => $toStatus,
-            'meta' => $meta,
-        ]);
+            $meta = (array) ($lockedInvoice->meta ?? []);
+            $meta['admin_status_update'] = [
+                'from' => $fromStatus,
+                'to' => $toStatus,
+                'updated_by' => (int) $request->user()->id,
+                'updated_at' => now()->toAtomString(),
+            ];
 
-        return response()->json(
-            $invoice->fresh()->load(['user', 'items', 'payments', 'tags', 'categories'])
-        );
+            if (isset($data['note']) && $data['note'] !== '') {
+                $meta['admin_status_update']['note'] = $data['note'];
+            }
+
+            $lockedInvoice->update([
+                'status' => $toStatus,
+                'meta' => $meta,
+            ]);
+
+            if ($toStatus === InvoiceStatusService::PAYMENT_FAILED) {
+                $this->invoiceAllocationService->releaseForFailedPayment(
+                    $lockedInvoice,
+                    isset($data['note']) ? (string) $data['note'] : 'admin_status_update'
+                );
+            }
+
+            return $lockedInvoice->fresh()->load(['user', 'items', 'payments', 'tags', 'categories']);
+        });
+
+        return response()->json($updatedInvoice);
     }
 }
