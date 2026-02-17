@@ -32,6 +32,7 @@ use App\Http\Controllers\User\AddressController as UserAddressController;
 use App\Http\Controllers\User\CommentController as UserCommentController;
 use App\Http\Controllers\User\ProfileController as UserProfileController;
 use App\Http\Controllers\User\TicketController as UserTicketController;
+use App\Http\Middleware\ForceJsonResponse;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/auth/login', [AuthController::class, 'login'])
@@ -43,7 +44,9 @@ Route::post('/auth/verify', [AuthController::class, 'verify'])
 
 Route::post('/cart/check', [CartController::class, 'check'])->name('cart.check');
 Route::post('/cart/coupon', [CouponController::class, 'preview'])->name('cart.coupon');
-Route::match(['get', 'post'], '/payments/callback', [PaymentController::class, 'callback'])->name('payments.callback');
+Route::match(['get', 'post'], '/payments/callback', [PaymentController::class, 'callback'])
+    ->withoutMiddleware([ForceJsonResponse::class])
+    ->name('payments.callback');
 
 Route::prefix('home')
     ->as('home.')

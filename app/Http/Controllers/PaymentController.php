@@ -14,6 +14,7 @@ use App\Support\Invoices\InvoiceAllocationService;
 use App\Support\Invoices\InvoiceStatusService;
 use App\Support\Payments\PaymentGatewayService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -437,7 +438,7 @@ class PaymentController extends Controller
         ]);
     }
 
-    public function callback(Request $request): JsonResponse
+    public function callback(Request $request): JsonResponse|RedirectResponse
     {
         $data = $request->validate([
             'payment_id' => ['required', 'integer', Rule::exists('payments', 'id')],
@@ -491,13 +492,29 @@ class PaymentController extends Controller
             requireCallbackToken: true
         );
 
-        return response()->json([
+        $payload = [
             'message' => $result['already_processed']
                 ? 'Payment callback already processed.'
                 : 'Payment callback processed successfully.',
             'payment' => $result['payment'],
             'invoice' => $result['invoice'],
-        ]);
+        ];
+
+        if ($this->shouldReturnCallbackJson($request)) {
+            return response()->json($payload);
+        }
+
+        $frontendRedirectUrl = $this->buildFrontendCallbackRedirectUrl(
+            $result['payment'],
+            $result['invoice'],
+            $authority !== '' ? $authority : null
+        );
+
+        if ($frontendRedirectUrl !== null) {
+            return redirect()->away($frontendRedirectUrl);
+        }
+
+        return response()->json($payload);
     }
 
     /**
@@ -624,5 +641,55 @@ class PaymentController extends Controller
     protected function generateInvoiceNumber(): string
     {
         return 'INV-'.now()->format('YmdHis').'-'.Str::upper(Str::random(4));
+    }
+
+    protected function shouldReturnCallbackJson(Request $request): bool
+    {
+        $responseMode = Str::lower(trim((string) $request->query('response', '')));
+
+        if (in_array($responseMode, ['json', 'api'], true)) {
+            return true;
+        }
+
+        if (in_array($responseMode, ['redirect', 'web'], true)) {
+            return false;
+        }
+
+        return $request->expectsJson() || $request->wantsJson();
+    }
+
+    protected function buildFrontendCallbackRedirectUrl(
+        Payment $payment,
+        Invoice $invoice,
+        ?string $authority = null
+    ): ?string {
+        $baseUrl = trim((string) config('payment.frontend_callback_url', ''));
+        if ($baseUrl === '') {
+            return null;
+        }
+
+        $query = [
+            'payment_id' => $payment->id,
+            'payment_status' => (string) $payment->status,
+            'invoice_id' => $invoice->id,
+            'invoice_status' => (string) $invoice->status,
+        ];
+
+        if ($payment->reference !== null && trim((string) $payment->reference) !== '') {
+            $query['reference'] = trim((string) $payment->reference);
+        }
+
+        if ($authority !== null && trim($authority) !== '') {
+            $query['authority'] = trim($authority);
+        }
+
+        $reason = trim((string) data_get((array) ($payment->meta ?? []), 'reason', ''));
+        if ($reason !== '') {
+            $query['reason'] = $reason;
+        }
+
+        $delimiter = str_contains($baseUrl, '?') ? '&' : '?';
+
+        return $baseUrl.$delimiter.http_build_query($query);
     }
 }

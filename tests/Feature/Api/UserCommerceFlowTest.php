@@ -597,6 +597,53 @@ class UserCommerceFlowTest extends TestCase
         ]);
     }
 
+    public function test_payment_callback_redirects_browser_to_frontend_callback_url(): void
+    {
+        $context = $this->createCheckoutInvoiceContext('09120000154');
+        $invoiceId = $context['invoice_id'];
+
+        Config::set('payment.frontend_callback_url', 'http://127.0.0.1:3000/payment/callback');
+
+        $initiateResponse = $this->postJson('/api/user/payments/initiate', [
+            'invoice_id' => $invoiceId,
+        ])->assertOk();
+
+        $paymentId = (int) $initiateResponse->json('payment.id');
+        $authority = (string) $initiateResponse->json('gateway.authority');
+        $callbackToken = (string) $initiateResponse->json('gateway.callback_token');
+
+        $response = $this->get(
+            '/api/payments/callback?'.http_build_query([
+                'payment_id' => $paymentId,
+                'status' => 'success',
+                'authority' => $authority,
+                'token' => $callbackToken,
+            ]),
+            [
+                'Accept' => 'text/html',
+            ]
+        );
+
+        $response->assertRedirect();
+
+        $location = (string) $response->headers->get('Location');
+        $this->assertStringStartsWith('http://127.0.0.1:3000/payment/callback?', $location);
+        $this->assertStringContainsString('payment_id='.$paymentId, $location);
+        $this->assertStringContainsString('payment_status=paid', $location);
+        $this->assertStringContainsString('invoice_id='.$invoiceId, $location);
+        $this->assertStringContainsString('invoice_status=paid', $location);
+
+        $this->assertDatabaseHas('payments', [
+            'id' => $paymentId,
+            'status' => 'paid',
+        ]);
+
+        $this->assertDatabaseHas('invoices', [
+            'id' => $invoiceId,
+            'status' => InvoiceStatusService::PAID,
+        ]);
+    }
+
     public function test_failed_payment_releases_stock_and_coupon_usage(): void
     {
         $context = $this->createCheckoutInvoiceContextWithCoupon('09120000150');

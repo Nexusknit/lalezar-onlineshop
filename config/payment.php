@@ -2,7 +2,8 @@
 
 return [
     'default_provider' => env('PAYMENT_PROVIDER', 'mock_gateway'),
-    'callback_base_url' => env('PAYMENT_CALLBACK_BASE_URL', env('APP_URL', 'http://127.0.0.1:8000')),
+    'callback_base_url' => env('PAYMENT_CALLBACK_BASE_URL', ''),
+    'frontend_callback_url' => env('PAYMENT_FRONTEND_CALLBACK_URL'),
 
     'providers' => [
         'mock_gateway' => [
@@ -18,4 +19,3 @@ return [
         ],
     ],
 ];
-
