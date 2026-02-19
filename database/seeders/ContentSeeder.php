@@ -27,8 +27,8 @@ class ContentSeeder extends Seeder
 
         if (! $creator) {
             $creator = User::factory()->create([
-                'name' => 'Content Manager',
-                'email' => 'content@example.com',
+                'name' => 'مدیر محتوا',
+                'email' => 'content@lalezarshop.ir',
             ]);
         }
 
@@ -48,8 +48,8 @@ class ContentSeeder extends Seeder
         $definitions = [
             [
                 'code' => 'WELCOME10',
-                'title' => 'Welcome 10%',
-                'description' => '10% off for regular purchases.',
+                'title' => 'خوش‌آمد ۱۰ درصد',
+                'description' => '۱۰٪ تخفیف برای سفارش‌های عادی.',
                 'discount_type' => 'percent',
                 'discount_value' => 10,
                 'min_subtotal' => 500000,
@@ -63,8 +63,8 @@ class ContentSeeder extends Seeder
             ],
             [
                 'code' => 'SAVE250K',
-                'title' => 'Save 250K',
-                'description' => 'Fixed discount for high-value carts.',
+                'title' => '۲۵۰ هزار تومان تخفیف',
+                'description' => 'تخفیف ثابت برای سفارش‌های بالای حداقل مشخص‌شده.',
                 'discount_type' => 'fixed',
                 'discount_value' => 250000,
                 'min_subtotal' => 2000000,
@@ -107,8 +107,9 @@ class ContentSeeder extends Seeder
     {
         $definitions = [
             [
-                'name' => 'Lighting & Decor',
-                'description' => 'Statement fixtures and artisan shades for elevated interiors.',
+                'name' => 'نور و روشنایی',
+                'slug' => 'lighting-decor',
+                'description' => 'انواع چراغ، آویز و تجهیزات نورپردازی برای فضای داخلی و دکوراتیو.',
                 'icon' => 'ph-lightbulb-filament-duotone',
                 'image_path' => 'categories/lighting-decor.jpg',
                 'order_column' => 1,
@@ -116,15 +117,17 @@ class ContentSeeder extends Seeder
                 'is_special' => true,
                 'children' => [
                     [
-                        'name' => 'Indoor Lighting',
-                        'description' => 'Pendant, wall, and floor lamps made for residential spaces.',
+                        'name' => 'روشنایی داخلی',
+                        'slug' => 'indoor-lighting',
+                        'description' => 'چراغ سقفی، دیواری و ایستاده مناسب منزل، دفتر و فروشگاه.',
                         'icon' => 'ph-lamp-duotone',
                         'image_path' => 'categories/indoor-lighting.jpg',
                         'order_column' => 2,
                     ],
                     [
-                        'name' => 'Outdoor Lighting',
-                        'description' => 'Weather-proof fixtures and architectural highlights.',
+                        'name' => 'روشنایی فضای باز',
+                        'slug' => 'outdoor-lighting',
+                        'description' => 'چراغ حیاطی، نما و محوطه با مقاومت بالا در شرایط محیطی.',
                         'icon' => 'ph-plant-duotone',
                         'image_path' => 'categories/outdoor-lighting.jpg',
                         'order_column' => 3,
@@ -132,16 +135,18 @@ class ContentSeeder extends Seeder
                 ],
             ],
             [
-                'name' => 'Smart Living',
-                'description' => 'Connected devices that blend lighting with automation.',
+                'name' => 'خانه هوشمند',
+                'slug' => 'smart-living',
+                'description' => 'کلید و سنسور هوشمند، کنترل روشنایی و تجهیزات اتوماسیون ساختمان.',
                 'icon' => 'ph-plug-charging-duotone',
                 'image_path' => 'categories/smart-living.jpg',
                 'order_column' => 4,
                 'status' => 'active',
                 'children' => [
                     [
-                        'name' => 'Commercial Solutions',
-                        'description' => 'High-output systems and energy audits for offices and retail.',
+                        'name' => 'تجهیزات برق صنعتی',
+                        'slug' => 'commercial-solutions',
+                        'description' => 'پروژکتور، نور صنعتی و تجهیزات برقی مناسب کارگاه، سوله و کارخانه.',
                         'icon' => 'ph-buildings-duotone',
                         'image_path' => 'categories/commercial-lighting.jpg',
                         'order_column' => 5,
@@ -195,51 +200,56 @@ class ContentSeeder extends Seeder
     {
         $definitions = [
             [
-                'name' => 'Lalezar Atelier',
-                'description' => 'Signature Persian-crafted fixtures for luxury interiors.',
-                'email' => 'atelier@lalezar.test',
-                'website' => 'https://atelier.lalezar.test',
-                'location' => 'Tehran, Iran',
+                'name' => 'لاله‌زار الکتریک',
+                'slug' => 'lalezar-atelier',
+                'description' => 'تامین‌کننده چراغ و تجهیزات روشنایی خانگی و پروژه‌ای.',
+                'email' => 'sales@lalezarshop.ir',
+                'website' => 'https://lalezarshop.ir',
+                'location' => 'تهران، بازار لاله‌زار',
                 'status' => 'active',
                 'logo_path' => 'brands/lalezar-atelier.svg',
                 'meta' => ['founded' => 2012, 'featured' => true],
             ],
             [
-                'name' => 'Nordic Filament',
-                'description' => 'Scandinavian-inspired minimal fixtures with sustainable finishes.',
-                'email' => 'hello@nordicfilament.test',
-                'website' => 'https://nordicfilament.test',
-                'location' => 'Copenhagen, Denmark',
+                'name' => 'آریا نور',
+                'slug' => 'nordic-filament',
+                'description' => 'برند تخصصی چراغ‌های مدرن، ریلی و نور خطی.',
+                'email' => 'info@aryanoor.ir',
+                'website' => 'https://aryanoor.ir',
+                'location' => 'تهران',
                 'status' => 'active',
                 'logo_path' => 'brands/nordic-filament.svg',
                 'meta' => ['founded' => 2016],
             ],
             [
-                'name' => 'Aurum Industrial',
-                'description' => 'High-output warehouse lighting and industrial-grade controls.',
-                'email' => 'sales@aurumindustrial.test',
-                'website' => 'https://aurumindustrial.test',
-                'location' => 'Dubai, UAE',
+                'name' => 'توان صنعت نور',
+                'slug' => 'aurum-industrial',
+                'description' => 'تجهیزات برق صنعتی، پروژکتور و چراغ سوله با توان بالا.',
+                'email' => 'industrial@tavannoor.ir',
+                'website' => 'https://tavannoor.ir',
+                'location' => 'اصفهان',
                 'status' => 'active',
                 'logo_path' => 'brands/aurum-industrial.svg',
                 'meta' => ['founded' => 2010],
             ],
             [
-                'name' => 'Verde Outdoor',
-                'description' => 'Landscape and facade systems built to survive desert climates.',
-                'email' => 'studio@verdeoutdoor.test',
-                'website' => 'https://verdeoutdoor.test',
-                'location' => 'Shiraz, Iran',
+                'name' => 'سبزتاب',
+                'slug' => 'verde-outdoor',
+                'description' => 'نورپردازی محوطه، باغ و نما با تجهیزات ضدآب.',
+                'email' => 'outdoor@sabztab.ir',
+                'website' => 'https://sabztab.ir',
+                'location' => 'شیراز',
                 'status' => 'active',
                 'logo_path' => 'brands/verde-outdoor.svg',
                 'meta' => ['founded' => 2018],
             ],
             [
-                'name' => 'Pulse Smart',
-                'description' => 'IoT dimmers, sensors, and voice-ready smart home kits.',
-                'email' => 'support@pulsesmart.test',
-                'website' => 'https://pulsesmart.test',
-                'location' => 'Berlin, Germany',
+                'name' => 'هوشمند پالس ایران',
+                'slug' => 'pulse-smart',
+                'description' => 'کلید، سنسور و ماژول‌های هوشمندسازی روشنایی و ساختمان.',
+                'email' => 'support@pulsesmart.ir',
+                'website' => 'https://pulsesmart.ir',
+                'location' => 'تهران',
                 'status' => 'active',
                 'logo_path' => 'brands/pulse-smart.svg',
                 'meta' => ['founded' => 2019, 'featured' => false],
@@ -277,11 +287,12 @@ class ContentSeeder extends Seeder
     {
         $definitions = [
             [
-                'name' => 'Luna Brass Pendant',
+                'name' => 'چراغ آویز برنجی لونا',
+                'slug' => 'luna-brass-pendant-light',
                 'brand' => 'lalezar-atelier',
                 'categories' => ['lighting-decor', 'indoor-lighting'],
                 'sku' => 'LZ-PRD-001',
-                'description' => 'Hand-spun brass pendant with a double-diffuser optic for warm dining light.',
+                'description' => 'چراغ آویز برنجی با پخش نور یکنواخت، مناسب میز غذاخوری و نشیمن.',
                 'stock' => 35,
                 'sold_count' => 140,
                 'price' => 7800000,
@@ -294,11 +305,12 @@ class ContentSeeder extends Seeder
                 ],
             ],
             [
-                'name' => 'Nordic Arc Floor Lamp',
+                'name' => 'چراغ ایستاده قوسی آریا',
+                'slug' => 'aria-arc-floor-lamp',
                 'brand' => 'nordic-filament',
                 'categories' => ['lighting-decor', 'indoor-lighting'],
                 'sku' => 'LZ-PRD-002',
-                'description' => 'Matte graphite floor lamp with dim-to-warm LED strip.',
+                'description' => 'چراغ ایستاده با بدنه فلزی و نور قابل تنظیم برای سالن و اتاق مطالعه.',
                 'stock' => 28,
                 'sold_count' => 95,
                 'price' => 5400000,
@@ -311,11 +323,12 @@ class ContentSeeder extends Seeder
                 ],
             ],
             [
-                'name' => 'Aurum Highbay Max',
+                'name' => 'پروژکتور صنعتی های‌بی مکس',
+                'slug' => 'hb-max-industrial-floodlight',
                 'brand' => 'aurum-industrial',
                 'categories' => ['commercial-solutions'],
                 'sku' => 'LZ-PRD-003',
-                'description' => '200W industrial highbay with motion telemetry for warehouses.',
+                'description' => 'پروژکتور ۲۰۰ وات صنعتی مناسب سوله، کارگاه و محیط‌های پرتردد.',
                 'stock' => 60,
                 'sold_count' => 310,
                 'price' => 12900000,
@@ -328,11 +341,12 @@ class ContentSeeder extends Seeder
                 ],
             ],
             [
-                'name' => 'Verde Facade Blade',
+                'name' => 'چراغ نمای بلید فضای باز',
+                'slug' => 'blade-outdoor-wall-light',
                 'brand' => 'verde-outdoor',
                 'categories' => ['outdoor-lighting', 'lighting-decor'],
                 'sku' => 'LZ-PRD-004',
-                'description' => 'Directional wall washer made for sandstone or travertine cladding.',
+                'description' => 'چراغ خطی نما با پخش نور زاویه‌ای برای نورپردازی دیوار و ساختمان.',
                 'stock' => 48,
                 'sold_count' => 185,
                 'price' => 9100000,
@@ -345,11 +359,12 @@ class ContentSeeder extends Seeder
                 ],
             ],
             [
-                'name' => 'Pulse Sync Starter Kit',
+                'name' => 'کیت خانه هوشمند پالس',
+                'slug' => 'pulse-smart-home-kit',
                 'brand' => 'pulse-smart',
                 'categories' => ['smart-living'],
                 'sku' => 'LZ-PRD-005',
-                'description' => 'Smart dimmer, motion sensor, and gateway kit with Matter support.',
+                'description' => 'شامل کلید هوشمند، سنسور حرکت و هاب مرکزی برای کنترل روشنایی.',
                 'stock' => 120,
                 'sold_count' => 420,
                 'price' => 4600000,
@@ -368,8 +383,9 @@ class ContentSeeder extends Seeder
             $brandId = $brands->get($definition['brand'])?->id;
 
             $product = Product::query()->updateOrCreate(
-                ['slug' => $slug],
+                ['sku' => $definition['sku']],
                 [
+                    'slug' => $slug,
                     'creator_id' => $creator->id,
                     'name' => $definition['name'],
                     'sku' => $definition['sku'],
@@ -402,49 +418,54 @@ class ContentSeeder extends Seeder
     {
         $definitions = [
             [
-                'title' => 'Layered Lighting Ideas for Modern Apartments',
+                'title' => 'راهنمای نورپردازی لایه‌ای برای خانه‌های ایرانی',
+                'slug' => 'layered-lighting-guide',
                 'cover_image' => 'blogs/layered-lighting.jpg',
-                'excerpt' => 'Use accent and task lights together to keep compact spaces flexible.',
-                'body' => 'Layering fixtures lets residents change the mood without rewiring. Start with a soft cove glow, add pendants for drama, and finish with portable lamps for late-night reading.',
+                'excerpt' => 'ترکیب نور عمومی، موضعی و دکوراتیو باعث زیبایی و کارایی بیشتر فضا می‌شود.',
+                'body' => 'برای نورپردازی بهتر منزل، ابتدا نور عمومی را با چراغ سقفی تامین کنید، سپس نور موضعی مانند آباژور و چراغ مطالعه را اضافه کنید و در نهایت از نور دکوراتیو برای ایجاد حس گرما استفاده کنید.',
                 'categories' => ['lighting-decor', 'indoor-lighting'],
                 'status' => 'active',
-                'meta' => ['read_time' => '6 min', 'featured' => true],
+                'meta' => ['read_time' => '۶ دقیقه', 'featured' => true],
             ],
             [
-                'title' => 'How Smart Dimmers Trim Energy Bills',
+                'title' => 'چطور کلیدهای هوشمند مصرف برق را کاهش می‌دهند',
+                'slug' => 'smart-switch-energy-saving',
                 'cover_image' => 'blogs/smart-dimmers.jpg',
-                'excerpt' => 'Precision dimming and schedules can reduce utility costs by 18%.',
-                'body' => 'Smart dimmers let you map routines to occupancy and daylight data. The result: less glare, happier teams, and measurable savings for both homes and offices.',
+                'excerpt' => 'با زمان‌بندی روشنایی و کنترل شدت نور، هزینه برق به شکل ملموس کم می‌شود.',
+                'body' => 'کلیدهای دیمر هوشمند امکان زمان‌بندی و تنظیم شدت نور را فراهم می‌کنند. با این روش، در زمان‌های غیرضروری روشنایی کم‌تر شده و مصرف برق ماهانه کاهش پیدا می‌کند.',
                 'categories' => ['smart-living'],
                 'status' => 'active',
-                'meta' => ['read_time' => '4 min'],
+                'meta' => ['read_time' => '۴ دقیقه'],
             ],
             [
-                'title' => 'Facade Lighting Checklist for Boutique Hotels',
+                'title' => 'چک‌لیست نورپردازی نما برای ساختمان‌های تجاری',
+                'slug' => 'facade-lighting-checklist',
                 'cover_image' => 'blogs/facade-lighting.jpg',
-                'excerpt' => 'Guests decide in 10 seconds whether a hotel feels premium.',
-                'body' => 'Uniform wall washers, discreet uplights, and a single accent color keep facades timeless. Add sensors so the show only runs when passersby are nearby.',
+                'excerpt' => 'نورپردازی اصولی نما، هویت بصری مجموعه را حرفه‌ای‌تر نمایش می‌دهد.',
+                'body' => 'در پروژه‌های تجاری، استفاده از چراغ نما با زاویه پخش مناسب، رنگ نور یکپارچه و سنسور روشنایی باعث جذابیت بیشتر نما و کاهش مصرف انرژی می‌شود.',
                 'categories' => ['outdoor-lighting', 'commercial-solutions'],
                 'status' => 'active',
-                'meta' => ['read_time' => '5 min'],
+                'meta' => ['read_time' => '۵ دقیقه'],
             ],
             [
-                'title' => 'Designing a Productive Studio with Warm Light',
+                'title' => 'نور مناسب کارگاه و استودیو؛ ترکیب نور گرم و کاربردی',
+                'slug' => 'workshop-studio-lighting-guide',
                 'cover_image' => 'blogs/studio-light.jpg',
-                'excerpt' => 'Artists need accurate color during the day and calm amber hues by night.',
-                'body' => 'Pair high CRI track lighting with a warm ambient glow. Task lights with adjustable lenses keep canvases glare-free, while amber night scenes help creators wind down.',
+                'excerpt' => 'برای محیط کار، هم دقت رنگ مهم است و هم کاهش خستگی چشم.',
+                'body' => 'در فضای کارگاهی و استودیویی، نور با شاخص نمود رنگ بالا در کنار نور محیطی ملایم، کیفیت کار را بالا می‌برد و خستگی چشم را کاهش می‌دهد.',
                 'categories' => ['indoor-lighting'],
                 'status' => 'active',
-                'meta' => ['read_time' => '7 min'],
+                'meta' => ['read_time' => '۷ دقیقه'],
             ],
             [
-                'title' => 'Spec’ing Lighting for Hybrid Workplaces',
+                'title' => 'راهنمای انتخاب روشنایی برای دفاتر مدرن و هیبریدی',
+                'slug' => 'modern-office-lighting-guide',
                 'cover_image' => 'blogs/hybrid-work.jpg',
-                'excerpt' => 'Adaptive controls balance focus rooms, lounges, and huddle corners.',
-                'body' => 'A hybrid office needs scenes for focus, collaboration, and video. Tuneable white fixtures synced with scheduling tools keep employees energized yet calm.',
+                'excerpt' => 'طراحی درست روشنایی، تمرکز کارکنان را در محیط‌های کاری افزایش می‌دهد.',
+                'body' => 'در دفاتر کاری جدید، باید برای اتاق جلسات، فضای تمرکز و ناحیه استراحت سناریوی نوری جدا تعریف شود. چراغ‌های قابل تنظیم بهترین گزینه برای این فضاها هستند.',
                 'categories' => ['commercial-solutions', 'smart-living'],
                 'status' => 'active',
-                'meta' => ['read_time' => '8 min'],
+                'meta' => ['read_time' => '۸ دقیقه'],
             ],
         ];
 
@@ -480,9 +501,10 @@ class ContentSeeder extends Seeder
     {
         $definitions = [
             [
-                'headline' => 'Lalezar Opens New Experience Showroom in Tehran',
-                'summary' => 'The new showroom blends interactive lighting zones with design consultations.',
-                'content' => 'Located in Elahieh, the space features hospitality mockups, residential scenes, and a rapid sample lab for architects. The showroom is open daily except Fridays.',
+                'headline' => 'افتتاح شوروم جدید لاله‌زار در تهران',
+                'slug' => 'lalezar-showroom-tehran-opening',
+                'summary' => 'شوروم جدید با تمرکز بر روشنایی خانگی، اداری و صنعتی شروع به کار کرد.',
+                'content' => 'در این شوروم، نمونه‌های متنوع چراغ، تجهیزات برق و محصولات هوشمند برای پروژه‌های ساختمانی و مصرف خانگی در دسترس مشتریان قرار گرفته است.',
                 'categories' => ['lighting-decor', 'indoor-lighting'],
                 'status' => 'active',
                 'meta' => [
@@ -491,9 +513,10 @@ class ContentSeeder extends Seeder
                 ],
             ],
             [
-                'headline' => 'Pulse Smart Line Receives Matter 1.3 Compatibility',
-                'summary' => 'Firmware updates unlock smoother onboarding for mixed-brand smart homes.',
-                'content' => 'The update includes faster pairing, improved scene sync, and lower standby draw. Existing customers can update through the Pulse mobile app with no extra hardware.',
+                'headline' => 'پشتیبانی نسخه جدید محصولات هوشمند پالس از استاندارد Matter',
+                'slug' => 'pulse-smart-matter-support',
+                'summary' => 'نسخه جدید سیستم هوشمند پالس، هماهنگی بیشتری با برندهای مختلف دارد.',
+                'content' => 'با این بروزرسانی، اتصال تجهیزات روشنایی هوشمند سریع‌تر شده و مدیریت سناریوهای نوری در اپلیکیشن پالس ساده‌تر انجام می‌شود.',
                 'categories' => ['smart-living'],
                 'status' => 'special',
                 'meta' => [
@@ -502,9 +525,10 @@ class ContentSeeder extends Seeder
                 ],
             ],
             [
-                'headline' => 'Commercial Retrofit Program Expanded to Three New Provinces',
-                'summary' => 'Energy-audit and installation services now cover Isfahan, Fars, and Mazandaran.',
-                'content' => 'The expanded program targets retail chains and offices needing lower operating costs. Participating clients receive ROI projections and phased upgrade plans.',
+                'headline' => 'گسترش خدمات برق صنعتی و بهینه‌سازی مصرف به سه استان جدید',
+                'slug' => 'industrial-energy-optimization-expansion',
+                'summary' => 'خدمات پروژه‌ای لاله‌زار در اصفهان، فارس و مازندران توسعه یافت.',
+                'content' => 'در این طرح، کسب‌وکارها می‌توانند برای بازطراحی روشنایی، کاهش مصرف برق و نوسازی تجهیزات فرسوده از تیم فنی لاله‌زار خدمات دریافت کنند.',
                 'categories' => ['commercial-solutions'],
                 'status' => 'active',
                 'meta' => [
@@ -513,9 +537,10 @@ class ContentSeeder extends Seeder
                 ],
             ],
             [
-                'headline' => 'Seasonal Outdoor Collection Preview Announced',
-                'summary' => 'Design partners can request early access to new outdoor fixtures.',
-                'content' => 'The preview includes corrosion-resistant bollards, adjustable facade blades, and low-voltage garden markers tuned for warm climates.',
+                'headline' => 'رونمایی از سری جدید تجهیزات روشنایی فضای باز',
+                'slug' => 'new-outdoor-lighting-series-launch',
+                'summary' => 'محصولات جدید فضای باز با مقاومت بالا در برابر شرایط محیطی معرفی شدند.',
+                'content' => 'در این سری، چراغ‌های محوطه‌ای ضدآب، چراغ نمای خطی و تجهیزات کم‌مصرف ویژه فضای باز عرضه شده است.',
                 'categories' => ['outdoor-lighting'],
                 'status' => 'active',
                 'meta' => [
@@ -557,7 +582,7 @@ class ContentSeeder extends Seeder
         $customer = User::query()->updateOrCreate(
             ['email' => 'customer@example.com'],
             [
-                'name' => 'Demo Customer',
+                'name' => 'مشتری نمونه',
                 'phone' => '09123334455',
                 'password' => bcrypt('password'),
                 'accessibility' => true,
@@ -575,19 +600,19 @@ class ContentSeeder extends Seeder
         $address = Address::query()->updateOrCreate(
             [
                 'user_id' => $customer->id,
-                'label' => 'Head Office',
+                'label' => 'آدرس اصلی',
             ],
             [
                 'city_id' => $city->id,
                 'recipient_name' => $customer->name,
                 'phone' => $customer->phone,
-                'street_line1' => 'No. 12, Andarzgoo Blvd',
-                'street_line2' => 'Unit 4',
+                'street_line1' => 'تهران، خیابان لاله‌زار، پلاک ۱۲',
+                'street_line2' => 'واحد ۴',
                 'postal_code' => '1958833471',
-                'building' => 'Mehr Building',
+                'building' => 'ساختمان مهر',
                 'unit' => '4',
                 'is_default' => true,
-                'meta' => ['type' => 'business'],
+                'meta' => ['type' => 'business', 'label_fa' => 'دفتر مرکزی'],
             ],
         );
 
@@ -778,10 +803,10 @@ class ContentSeeder extends Seeder
     {
         $definitions = [
             [
-                'name' => 'Jasmine Farahani',
-                'title' => 'Creative Director',
+                'name' => 'یاسمن فراهانی',
+                'title' => 'مدیر خلاقیت',
                 'photo_path' => 'team/jasmine-farahani.jpg',
-                'bio' => 'Leads lighting narratives for hospitality and concept retail projects across the region.',
+                'bio' => 'هدایت‌گر طراحی نور پروژه‌های فروشگاهی و فضاهای تجاری.',
                 'social_links' => [
                     'linkedin' => 'https://www.linkedin.com/in/jasmine-farahani',
                     'instagram' => 'https://www.instagram.com/jasmine.light',
@@ -791,10 +816,10 @@ class ContentSeeder extends Seeder
                 'meta' => ['languages' => ['fa', 'en']],
             ],
             [
-                'name' => 'Navid Moradi',
-                'title' => 'Head of Engineering',
+                'name' => 'نوید مرادی',
+                'title' => 'مدیر فنی',
                 'photo_path' => 'team/navid-moradi.jpg',
-                'bio' => 'Oversees photometric testing, supply chain audits, and installation guides.',
+                'bio' => 'مسئول بررسی فنی محصولات، کنترل کیفیت و استاندارد نصب تجهیزات.',
                 'social_links' => [
                     'linkedin' => 'https://www.linkedin.com/in/navid-moradi',
                     'github' => 'https://github.com/navid-moradi',
@@ -804,22 +829,22 @@ class ContentSeeder extends Seeder
                 'meta' => ['certifications' => ['LC'], 'languages' => ['fa', 'en', 'de']],
             ],
             [
-                'name' => 'Sara Khadem',
-                'title' => 'Merchandising Lead',
+                'name' => 'سارا خادم',
+                'title' => 'مدیر بازرگانی',
                 'photo_path' => 'team/sara-khadem.jpg',
-                'bio' => 'Curates seasonal collections and builds tactile in-store experiences.',
+                'bio' => 'مدیریت تامین کالا و انتخاب محصولات متناسب با نیاز بازار برق و روشنایی.',
                 'social_links' => [
                     'linkedin' => 'https://www.linkedin.com/in/sara-khadem',
                 ],
                 'order_column' => 3,
                 'status' => 'active',
-                'meta' => ['focus' => 'retail partnerships'],
+                'meta' => ['focus' => 'همکاری‌های خرده‌فروشی'],
             ],
             [
-                'name' => 'Kamran Vahedi',
-                'title' => 'Customer Success Manager',
+                'name' => 'کامران واحدی',
+                'title' => 'مدیر ارتباط با مشتریان',
                 'photo_path' => 'team/kamran-vahedi.jpg',
-                'bio' => 'Ensures designers and contractors have up-to-date specs and training.',
+                'bio' => 'پاسخ‌گویی تخصصی به مشتریان پروژه‌ای و پیگیری نیازهای پس از خرید.',
                 'social_links' => [
                     'linkedin' => 'https://www.linkedin.com/in/kamran-vahedi',
                     'twitter' => 'https://twitter.com/kamranvahedi',
@@ -829,17 +854,17 @@ class ContentSeeder extends Seeder
                 'meta' => ['nps' => 74],
             ],
             [
-                'name' => 'Elena Yousefi',
-                'title' => 'Brand Strategist',
+                'name' => 'النا یوسفی',
+                'title' => 'استراتژیست برند',
                 'photo_path' => 'team/elena-yousefi.jpg',
-                'bio' => 'Connects campaigns, events, and editorial content for the Lalezar community.',
+                'bio' => 'برنامه‌ریزی کمپین‌ها، محتوا و ارتباطات برند لاله‌زار با بازار هدف.',
                 'social_links' => [
                     'linkedin' => 'https://www.linkedin.com/in/elena-yousefi',
                     'behance' => 'https://www.behance.net/elenayousefi',
                 ],
                 'order_column' => 5,
                 'status' => 'active',
-                'meta' => ['focus' => 'editorial'],
+                'meta' => ['focus' => 'سردبیری محتوا'],
             ],
         ];
 

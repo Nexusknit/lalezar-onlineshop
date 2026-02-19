@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Support\Auth\OtpNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -13,6 +14,12 @@ use OpenApi\Attributes as OA;
 
 class AuthController extends Controller
 {
+    public function __construct(
+        protected OtpNotificationService $otpNotificationService
+    )
+    {
+    }
+
     #[OA\Post(
         path: '/api/auth/login',
         operationId: 'authLogin',
@@ -52,14 +59,21 @@ class AuthController extends Controller
         abort_if($phone === null, 422, 'Phone number format is invalid.');
 
         $token = (string) random_int(100_000, 999_999);
+        $ttlMinutes = max(1, (int) config('otp.ttl_minutes', 5));
 
         $challenge = [
             'phone' => $phone,
             'token' => $token,
-            'expires_at' => now()->addMinutes(5),
+            'expires_at' => now()->addMinutes($ttlMinutes),
         ];
 
-        Cache::put($this->challengeKey($phone), $challenge, now()->addMinutes(5));
+        Cache::put($this->challengeKey($phone), $challenge, now()->addMinutes($ttlMinutes));
+        try {
+            $this->otpNotificationService->send($phone, $token);
+        } catch (\Throwable $exception) {
+            Cache::forget($this->challengeKey($phone));
+            throw $exception;
+        }
 
         $payload = [
             'message' => 'Verification code sent successfully.',

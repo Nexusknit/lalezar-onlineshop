@@ -15,7 +15,7 @@ return [
             'merchant_id' => env('PAYMENT_ZARINPAL_MERCHANT_ID'),
             'sandbox' => (bool) env('PAYMENT_ZARINPAL_SANDBOX', true),
             'timeout' => (int) env('PAYMENT_ZARINPAL_TIMEOUT', 10),
-            'description' => env('PAYMENT_ZARINPAL_DESCRIPTION', 'Online order payment'),
+            'description' => env('PAYMENT_ZARINPAL_DESCRIPTION', 'پرداخت سفارش فروشگاه لاله‌زار'),
         ],
     ],
 ];
