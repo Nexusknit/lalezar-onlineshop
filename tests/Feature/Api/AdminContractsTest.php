@@ -5,6 +5,7 @@ namespace Tests\Feature\Api;
 use App\Models\Category;
 use App\Models\City;
 use App\Models\Invoice;
+use App\Models\Payment;
 use App\Models\Permission;
 use App\Models\Product;
 use App\Models\State;
@@ -329,6 +330,30 @@ class AdminContractsTest extends TestCase
         $this->postJson("/api/admin/users/{$target->id}/impersonate")
             ->assertStatus(422)
             ->assertJsonValidationErrors('reason');
+    }
+
+    public function test_admin_invoice_index_includes_payment_reference_contract(): void
+    {
+        $admin = $this->createUserWithPermissions('invoice.all');
+        Sanctum::actingAs($admin);
+
+        $invoice = $this->createInvoiceForStatus(InvoiceStatusService::PAID);
+
+        Payment::query()->create([
+            'invoice_id' => $invoice->id,
+            'user_id' => $invoice->user_id,
+            'amount' => $invoice->total,
+            'currency' => $invoice->currency,
+            'method' => 'shetabit',
+            'status' => 'paid',
+            'reference' => 'TRACE-ADMIN-001',
+            'paid_at' => now(),
+        ]);
+
+        $this->getJson('/api/admin/invoices')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $invoice->id)
+            ->assertJsonPath('data.0.payments.0.reference', 'TRACE-ADMIN-001');
     }
 
     public function test_admin_can_update_invoice_status_when_transition_is_allowed(): void

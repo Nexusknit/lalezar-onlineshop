@@ -7,11 +7,19 @@ use App\Models\Payment;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class PaymentGatewayService
 {
     public const PROVIDER_MOCK = 'mock_gateway';
+
+    public const PROVIDER_SHETABIT = 'shetabit';
+
     public const PROVIDER_ZARINPAL = 'zarinpal';
+
+    public function __construct(
+        protected ShetabitPaymentClient $shetabitPaymentClient
+    ) {}
 
     /**
      * @return list<string>
@@ -20,6 +28,7 @@ class PaymentGatewayService
     {
         return [
             self::PROVIDER_MOCK,
+            self::PROVIDER_SHETABIT,
             self::PROVIDER_ZARINPAL,
         ];
     }
@@ -61,6 +70,7 @@ class PaymentGatewayService
         $provider = $this->resolveProvider($payment->method);
 
         return match ($provider) {
+            self::PROVIDER_SHETABIT => $this->initiateShetabit($payment, $invoice),
             self::PROVIDER_ZARINPAL => $this->initiateZarinpal($payment, $invoice),
             default => $this->initiateMock($payment),
         };
@@ -94,6 +104,10 @@ class PaymentGatewayService
 
         if ($provider === self::PROVIDER_ZARINPAL && $redirectUrl === '' && $authority !== '') {
             $redirectUrl = $this->zarinpalStartPayUrl($authority);
+        }
+
+        if ($provider === self::PROVIDER_SHETABIT && $redirectUrl === '' && $authority !== '') {
+            $redirectUrl = $this->shetabitStartPayUrl($authority);
         }
 
         return [
@@ -134,12 +148,123 @@ class PaymentGatewayService
             ];
         }
 
+        if ($provider === self::PROVIDER_SHETABIT) {
+            return $this->resolveShetabitCallbackOutcome(
+                $payment,
+                $invoice,
+                $authority,
+                $gatewayStatus
+            );
+        }
+
         return $this->resolveZarinpalCallbackOutcome(
             $payment,
             $invoice,
             $authority,
             $gatewayStatus
         );
+    }
+
+    /**
+     * @return array{
+     *   provider:string,
+     *   authority:string,
+     *   callback_token:string,
+     *   redirect_url:string,
+     *   meta:array<string,mixed>
+     * }
+     */
+    protected function initiateShetabit(Payment $payment, Invoice $invoice): array
+    {
+        $driver = $this->shetabitDriver();
+        $merchantId = trim((string) config('payment.providers.shetabit.merchant_id', ''));
+        if ($driver === 'zarinpal' && $merchantId === '') {
+            throw ValidationException::withMessages([
+                'payment' => ['Shetabit Zarinpal merchant id is missing.'],
+            ]);
+        }
+
+        $meta = (array) ($payment->meta ?? []);
+        $callbackToken = (string) data_get($meta, 'callback_token');
+        if ($callbackToken === '') {
+            throw ValidationException::withMessages([
+                'payment' => ['Payment callback token is missing.'],
+            ]);
+        }
+
+        $amount = (int) round((float) $payment->amount);
+        if ($amount < 1) {
+            throw ValidationException::withMessages([
+                'payment' => ['Payment amount must be greater than zero.'],
+            ]);
+        }
+
+        $callbackUrl = $this->buildCallbackUrl([
+            'payment_id' => $payment->id,
+            'token' => $callbackToken,
+        ]);
+
+        $invoice->loadMissing('user');
+        $description = $this->paymentDescription($invoice, 'payment.providers.shetabit.description');
+        $details = array_filter([
+            'description' => $description,
+            'invoice_id' => (string) $invoice->id,
+            'invoice_number' => (string) $invoice->number,
+            'mobile' => (string) ($invoice->user?->phone ?? ''),
+            'email' => (string) ($invoice->user?->email ?? ''),
+        ]);
+
+        $requestPayload = [
+            'driver' => $driver,
+            'mode' => $this->shetabitMode(),
+            'amount' => $amount,
+            'currency' => $this->shetabitCurrency(),
+            'callback_url' => $callbackUrl,
+            'description' => $description,
+            'details' => $details,
+        ];
+
+        try {
+            $purchase = $this->shetabitPaymentClient->purchase(
+                $this->shetabitConfig($callbackUrl),
+                $driver,
+                $amount,
+                $callbackUrl,
+                $details
+            );
+        } catch (Throwable $exception) {
+            throw ValidationException::withMessages([
+                'payment' => [$this->gatewayExceptionMessage($exception, 'Unable to initiate Shetabit payment.')],
+            ]);
+        }
+
+        $authority = trim((string) ($purchase['authority'] ?? ''));
+        $redirectUrl = trim((string) ($purchase['redirect_url'] ?? ''));
+        if ($authority === '' || $redirectUrl === '') {
+            throw ValidationException::withMessages([
+                'payment' => ['Shetabit payment gateway did not return a usable authority or redirect URL.'],
+            ]);
+        }
+
+        return [
+            'provider' => self::PROVIDER_SHETABIT,
+            'authority' => $authority,
+            'callback_token' => $callbackToken,
+            'redirect_url' => $redirectUrl,
+            'meta' => [
+                'gateway' => self::PROVIDER_SHETABIT,
+                'driver' => $driver,
+                'mode' => $this->shetabitMode(),
+                'authority' => $authority,
+                'callback_token' => $callbackToken,
+                'redirect_url' => $redirectUrl,
+                'gateway_request' => $this->sanitizeGatewayPayload($requestPayload),
+                'gateway_response' => $this->sanitizeGatewayPayload([
+                    'authority' => $authority,
+                    'redirect_url' => $redirectUrl,
+                ]),
+            ],
+        ];
     }
 
     /**
@@ -293,6 +418,80 @@ class PaymentGatewayService
      * @return array{
      *   status:'success'|'failed',
      *   reference:?string,
+     *   reason:?string,
+     *   meta?:array<string,mixed>
+     * }
+     */
+    protected function resolveShetabitCallbackOutcome(
+        Payment $payment,
+        Invoice $invoice,
+        ?string $authority,
+        ?string $gatewayStatus
+    ): array {
+        $normalizedAuthority = trim((string) ($authority ?? ''));
+        if ($normalizedAuthority === '') {
+            throw ValidationException::withMessages([
+                'authority' => ['Shetabit callback is missing authority.'],
+            ]);
+        }
+
+        $status = Str::lower(trim((string) ($gatewayStatus ?? '')));
+        if (! in_array($status, ['ok', 'success', 'paid', '1', 'true'], true)) {
+            return [
+                'status' => 'failed',
+                'reference' => null,
+                'reason' => $status === '' ? 'shetabit_callback_not_ok' : "shetabit_callback_{$status}",
+                'meta' => [
+                    'gateway_callback' => $this->sanitizeGatewayPayload([
+                        'authority' => $normalizedAuthority,
+                        'status' => $status,
+                    ]),
+                ],
+            ];
+        }
+
+        try {
+            $receipt = $this->shetabitPaymentClient->verify(
+                $this->shetabitConfig(),
+                $this->shetabitDriver(),
+                (int) round((float) $invoice->total),
+                $normalizedAuthority
+            );
+        } catch (Throwable $exception) {
+            return [
+                'status' => 'failed',
+                'reference' => null,
+                'reason' => $this->gatewayExceptionMessage($exception, 'shetabit_verify_failed'),
+                'meta' => [
+                    'gateway_callback' => $this->sanitizeGatewayPayload([
+                        'authority' => $normalizedAuthority,
+                        'status' => $status,
+                    ]),
+                    'gateway_verify_error' => $this->gatewayExceptionMessage($exception, 'shetabit_verify_failed'),
+                ],
+            ];
+        }
+
+        $reference = trim((string) ($receipt['reference'] ?? ''));
+
+        return [
+            'status' => 'success',
+            'reference' => $reference !== '' ? $reference : null,
+            'reason' => null,
+            'meta' => [
+                'gateway_callback' => $this->sanitizeGatewayPayload([
+                    'authority' => $normalizedAuthority,
+                    'status' => $status,
+                ]),
+                'gateway_verify_response' => $this->sanitizeGatewayPayload((array) ($receipt['details'] ?? [])),
+            ],
+        ];
+    }
+
+    /**
+     * @return array{
+     *   status:'success'|'failed',
+     *   reference:?string,
      *   reason:?string
      * }
      */
@@ -415,5 +614,117 @@ class PaymentGatewayService
     protected function isZarinpalSandbox(): bool
     {
         return (bool) config('payment.providers.zarinpal.sandbox', true);
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    protected function shetabitConfig(?string $callbackUrl = null): array
+    {
+        $config = require \Shetabit\Multipay\Payment::getDefaultConfigPath();
+        $driver = $this->shetabitDriver();
+        $driverConfig = (array) data_get($config, "drivers.{$driver}", []);
+
+        if ($driver === 'zarinpal') {
+            $driverConfig = array_merge($driverConfig, [
+                'mode' => $this->shetabitMode(),
+                'merchantId' => trim((string) config('payment.providers.shetabit.merchant_id', '')),
+                'callbackUrl' => $callbackUrl ?: (string) data_get($driverConfig, 'callbackUrl', ''),
+                'description' => (string) config('payment.providers.shetabit.description', 'پرداخت سفارش '.config('app.name', 'فروشگاه')),
+                'currency' => $this->shetabitCurrency(),
+            ]);
+        }
+
+        data_set($config, 'default', $driver);
+        data_set($config, "drivers.{$driver}", $driverConfig);
+
+        return $config;
+    }
+
+    protected function shetabitDriver(): string
+    {
+        return Str::lower(trim((string) config('payment.providers.shetabit.driver', 'zarinpal'))) ?: 'zarinpal';
+    }
+
+    protected function shetabitMode(): string
+    {
+        return (bool) config('payment.providers.shetabit.sandbox', true) ? 'sandbox' : 'normal';
+    }
+
+    protected function shetabitCurrency(): string
+    {
+        $currency = Str::upper(trim((string) config('payment.providers.shetabit.currency', 'R')));
+
+        return in_array($currency, ['R', 'T'], true) ? $currency : 'R';
+    }
+
+    protected function shetabitStartPayUrl(string $authority): string
+    {
+        if ($this->shetabitDriver() !== 'zarinpal') {
+            return '';
+        }
+
+        $host = $this->shetabitMode() === 'sandbox'
+            ? 'https://sandbox.zarinpal.com'
+            : 'https://www.zarinpal.com';
+
+        return "{$host}/pg/StartPay/{$authority}";
+    }
+
+    protected function paymentDescription(Invoice $invoice, string $configKey): string
+    {
+        $descriptionPrefix = trim((string) config($configKey, 'پرداخت سفارش '.config('app.name', 'فروشگاه')));
+        $description = trim("{$descriptionPrefix} #{$invoice->number}");
+
+        return $description !== '' ? $description : "Invoice #{$invoice->id}";
+    }
+
+    /**
+     * @param  array<string,mixed>  $payload
+     * @return array<string,mixed>
+     */
+    protected function sanitizeGatewayPayload(array $payload): array
+    {
+        $sensitiveKeys = [
+            'api_key',
+            'apikey',
+            'callback_token',
+            'callbacktoken',
+            'client_secret',
+            'clientsecret',
+            'merchant_id',
+            'merchantid',
+            'password',
+            'secret',
+            'token',
+        ];
+
+        foreach ($payload as $key => $value) {
+            $normalizedKey = Str::lower(str_replace(['-', '_'], '', (string) $key));
+            if (in_array($normalizedKey, $sensitiveKeys, true)) {
+                $payload[$key] = '[redacted]';
+
+                continue;
+            }
+
+            if (is_array($value)) {
+                $payload[$key] = $this->sanitizeGatewayPayload($value);
+
+                continue;
+            }
+
+            if (is_string($value) && str_contains($value, 'token=')) {
+                $payload[$key] = preg_replace('/([?&]token=)[^&]+/i', '$1[redacted]', $value) ?? '[redacted]';
+            }
+        }
+
+        return $payload;
+    }
+
+    protected function gatewayExceptionMessage(Throwable $exception, string $fallback): string
+    {
+        $message = trim($exception->getMessage());
+
+        return $message !== '' ? $message : $fallback;
     }
 }

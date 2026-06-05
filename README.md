@@ -37,6 +37,7 @@ php artisan serve --host=127.0.0.1 --port=8000
 
 ```dotenv
 APP_URL=http://127.0.0.1:8000
+FRONTEND_URL=http://127.0.0.1:3000
 APP_LOCALE=fa
 APP_FAKER_LOCALE=fa_IR
 DB_CONNECTION=sqlite
@@ -44,7 +45,6 @@ DB_DATABASE=/absolute/path/to/lalezar-onlineshop/database/database.sqlite
 CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 PAYMENT_PROVIDER=mock_gateway
 PAYMENT_MOCK_ENABLED=true
-PAYMENT_FRONTEND_CALLBACK_URL=http://127.0.0.1:3000/payment/callback
 ```
 
 ## تست‌ها
@@ -60,9 +60,15 @@ php artisan test --filter UserCommerceFlowTest
 ## پرداخت و OTP
 
 - در local از `PAYMENT_PROVIDER=mock_gateway` استفاده شود.
-- پرداخت واقعی باید در فاز پرداخت با `shetabit/multipay` و driver زرین‌پال پیاده شود. فعلا برای production از placeholderهای `PAYMENT_SHETABIT_*` استفاده می‌شود.
+- پرداخت واقعی از provider `shetabit` و driver زرین‌پال استفاده می‌کند. برای production مقدارهای `PAYMENT_PROVIDER=shetabit`، `PAYMENT_SHETABIT_ENABLED=true` و `PAYMENT_MOCK_ENABLED=false` لازم است.
+- `PAYMENT_CALLBACK_BASE_URL` پیش‌فرض از `APP_URL` خوانده می‌شود و `PAYMENT_FRONTEND_CALLBACK_URL` از `FRONTEND_URL` + مسیر `/payment/callback` ساخته می‌شود؛ فقط برای دامنه متفاوت override شوند.
+- مقدارهای مبلغ فعلی پروژه بر اساس `IRR` هستند؛ بنابراین برای Shetabit مقدار `PAYMENT_SHETABIT_CURRENCY=R` نگه داشته شود مگر اینکه schema قیمت‌ها به تومان تغییر کند.
 - OTP فقط با Kavenegar پشتیبانی می‌شود؛ اتصال واقعی فقط با `OTP_KAVENEGAR_ENABLED=true` و کلیدهای Kavenegar فعال شود.
 - ایمیل در مسیرهای فعلی اجباری نیست و می‌تواند روی `MAIL_MAILER=log` بماند. کاربرد production آن برای رسید سفارش، اعلان تیکت/پشتیبانی، هشدارهای مدیریتی و ایمیل‌های عملیاتی آینده است.
+
+## Deploy روی Linux/cPanel
+
+راهنمای deploy و envهای production در `DEPLOYMENT_CPANEL.md` ثبت شده است.
 
 ## امنیت و production hardening
 

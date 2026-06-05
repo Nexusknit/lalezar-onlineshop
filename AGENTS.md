@@ -13,7 +13,7 @@ This repository is the Laravel backend API for the electrical supplies online sh
 - L5 Swagger annotations
 - Kavenegar OTP integration
 - Mock gateway for local/test payments
-- Shetabit Multipay is installed for production payment gateway integration; wiring the payment service to Shetabit belongs to Phase 2
+- Shetabit Multipay provider for production payment gateway integration with Zarinpal as the first configured driver
 
 ## Local Commands
 
@@ -39,7 +39,7 @@ This repository is the Laravel backend API for the electrical supplies online sh
   - `app/Support/Invoices/InvoiceAllocationService.php`
   - `app/Support/Invoices/InvoiceStatusService.php`
   - `app/Support/Payments/PaymentGatewayService.php`
-- Payment configuration must stay environment-driven. Site name, site URL, gateway driver, merchant keys, callback URLs, and accounting sync settings should not be hard-coded.
+- Payment configuration must stay environment-driven. `APP_URL` is the default gateway callback base, `FRONTEND_URL` is the default payment result URL base, and gateway-specific callback envs should only override those when the domains differ.
 - Invoice status transitions must go through `InvoiceStatusService::canTransition(...)`.
 - Stock and coupon allocation changes must stay transactional and lock relevant rows.
 

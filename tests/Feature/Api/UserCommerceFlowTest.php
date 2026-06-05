@@ -5,11 +5,13 @@ namespace Tests\Feature\Api;
 use App\Models\City;
 use App\Models\Coupon;
 use App\Models\Invoice;
+use App\Models\Payment;
 use App\Models\Product;
 use App\Models\State;
 use App\Models\User;
-use App\Support\Payments\PaymentGatewayService;
 use App\Support\Invoices\InvoiceStatusService;
+use App\Support\Payments\PaymentGatewayService;
+use App\Support\Payments\ShetabitPaymentClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
@@ -867,6 +869,138 @@ class UserCommerceFlowTest extends TestCase
             ->assertJsonPath('invoice.status', InvoiceStatusService::PAID);
 
         Http::assertSentCount(2);
+    }
+
+    public function test_user_can_initiate_payment_with_shetabit_zarinpal_when_configured(): void
+    {
+        $context = $this->createCheckoutInvoiceContext('09120000154');
+        $invoiceId = $context['invoice_id'];
+
+        $fakeClient = new class extends ShetabitPaymentClient
+        {
+            public array $purchases = [];
+
+            public function purchase(
+                array $config,
+                string $driver,
+                int|float $amount,
+                string $callbackUrl,
+                array $details = []
+            ): array {
+                $this->purchases[] = compact('config', 'driver', 'amount', 'callbackUrl', 'details');
+
+                return [
+                    'authority' => 'S000000000000000000000000000000000',
+                    'redirect_url' => 'https://sandbox.zarinpal.com/pg/StartPay/S000000000000000000000000000000000',
+                ];
+            }
+        };
+        $this->app->instance(ShetabitPaymentClient::class, $fakeClient);
+
+        Config::set('payment.providers.shetabit.enabled', true);
+        Config::set('payment.providers.shetabit.driver', 'zarinpal');
+        Config::set('payment.providers.shetabit.merchant_id', 'test-merchant-id');
+        Config::set('payment.providers.shetabit.sandbox', true);
+        Config::set('payment.providers.shetabit.currency', 'R');
+        Config::set('payment.default_provider', PaymentGatewayService::PROVIDER_SHETABIT);
+
+        $response = $this->postJson('/api/user/payments/initiate', [
+            'invoice_id' => $invoiceId,
+            'method' => PaymentGatewayService::PROVIDER_SHETABIT,
+        ]);
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('invoice.id', $invoiceId)
+            ->assertJsonPath('invoice.status', InvoiceStatusService::PAYMENT_PENDING)
+            ->assertJsonPath('payment.status', 'pending')
+            ->assertJsonPath('payment.method', PaymentGatewayService::PROVIDER_SHETABIT)
+            ->assertJsonPath('gateway.provider', PaymentGatewayService::PROVIDER_SHETABIT)
+            ->assertJsonPath('gateway.authority', 'S000000000000000000000000000000000')
+            ->assertJsonPath(
+                'gateway.redirect_url',
+                'https://sandbox.zarinpal.com/pg/StartPay/S000000000000000000000000000000000'
+            );
+
+        $this->assertCount(1, $fakeClient->purchases);
+        $this->assertSame('zarinpal', $fakeClient->purchases[0]['driver']);
+        $this->assertSame('R', data_get($fakeClient->purchases[0], 'config.drivers.zarinpal.currency'));
+        $this->assertStringContainsString('/api/payments/callback?', $fakeClient->purchases[0]['callbackUrl']);
+
+        /** @var Payment $payment */
+        $payment = Payment::query()->where('invoice_id', $invoiceId)->firstOrFail();
+        $this->assertSame(PaymentGatewayService::PROVIDER_SHETABIT, $payment->method);
+        $this->assertSame('S000000000000000000000000000000000', $payment->reference);
+        $this->assertStringContainsString('token=[redacted]', (string) data_get($payment->meta, 'gateway_request.callback_url'));
+    }
+
+    public function test_shetabit_callback_can_mark_payment_as_paid_after_gateway_verify(): void
+    {
+        $context = $this->createCheckoutInvoiceContext('09120000155');
+        $invoiceId = $context['invoice_id'];
+
+        $fakeClient = new class extends ShetabitPaymentClient
+        {
+            public function purchase(
+                array $config,
+                string $driver,
+                int|float $amount,
+                string $callbackUrl,
+                array $details = []
+            ): array {
+                return [
+                    'authority' => 'T000000000000000000000000000000000',
+                    'redirect_url' => 'https://sandbox.zarinpal.com/pg/StartPay/T000000000000000000000000000000000',
+                ];
+            }
+
+            public function verify(array $config, string $driver, int|float $amount, string $authority): array
+            {
+                return [
+                    'reference' => 'SHT-7788990011',
+                    'details' => [
+                        'code' => 100,
+                        'message' => 'Verified',
+                        'ref_id' => 'SHT-7788990011',
+                        'token' => 'secret-token',
+                        'merchant_id' => 'secret-merchant',
+                    ],
+                ];
+            }
+        };
+        $this->app->instance(ShetabitPaymentClient::class, $fakeClient);
+
+        Config::set('payment.providers.shetabit.enabled', true);
+        Config::set('payment.providers.shetabit.driver', 'zarinpal');
+        Config::set('payment.providers.shetabit.merchant_id', 'test-merchant-id');
+        Config::set('payment.providers.shetabit.sandbox', true);
+        Config::set('payment.default_provider', PaymentGatewayService::PROVIDER_SHETABIT);
+
+        $initiate = $this->postJson('/api/user/payments/initiate', [
+            'invoice_id' => $invoiceId,
+            'method' => PaymentGatewayService::PROVIDER_SHETABIT,
+        ])->assertOk();
+
+        $paymentId = (int) $initiate->json('payment.id');
+        $callbackToken = (string) $initiate->json('gateway.callback_token');
+
+        $this->getJson('/api/payments/callback?'.http_build_query([
+            'payment_id' => $paymentId,
+            'Authority' => 'T000000000000000000000000000000000',
+            'Status' => 'OK',
+            'token' => $callbackToken,
+        ]))
+            ->assertOk()
+            ->assertJsonPath('payment.id', $paymentId)
+            ->assertJsonPath('payment.status', 'paid')
+            ->assertJsonPath('payment.reference', 'SHT-7788990011')
+            ->assertJsonPath('invoice.id', $invoiceId)
+            ->assertJsonPath('invoice.status', InvoiceStatusService::PAID);
+
+        /** @var Payment $payment */
+        $payment = Payment::query()->findOrFail($paymentId);
+        $this->assertSame('[redacted]', data_get($payment->meta, 'gateway_callback_log.gateway_verify_response.token'));
+        $this->assertSame('[redacted]', data_get($payment->meta, 'gateway_callback_log.gateway_verify_response.merchant_id'));
     }
 
     public function test_authenticated_user_can_list_and_view_only_own_invoices(): void

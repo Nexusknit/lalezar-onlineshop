@@ -17,8 +17,7 @@ class InvoiceController extends Controller
 {
     public function __construct(
         protected InvoiceAllocationService $invoiceAllocationService
-    )
-    {
+    ) {
         $this->middleware('permission:invoice.all')->only('all');
         $this->middleware('permission:invoice.items')->only('items');
         $this->middleware('permission:invoice.detail')->only('detail');
@@ -47,7 +46,7 @@ class InvoiceController extends Controller
         $perPage = $perPage > 0 ? min($perPage, 100) : 15;
 
         $invoices = Invoice::query()
-            ->with(['user'])
+            ->with(['user', 'payments'])
             ->when($request->filled('status'), static function ($query) use ($request) {
                 $query->where('status', $request->string('status'));
             })

@@ -27,8 +27,7 @@ class PaymentController extends Controller
     public function __construct(
         protected InvoiceAllocationService $invoiceAllocationService,
         protected PaymentGatewayService $paymentGatewayService
-    )
-    {
+    ) {
         $this->middleware('auth:sanctum')->except('callback');
     }
 
@@ -343,7 +342,7 @@ class PaymentController extends Controller
             try {
                 $gateway = $this->paymentGatewayService->initiate($payment, $invoice);
             } catch (ValidationException $validationException) {
-                DB::transaction(function () use ($payment, $invoice, $previousStatus, $reservedForRetry): void {
+                DB::transaction(function () use ($payment, $invoice, $previousStatus, $reservedForRetry, $validationException): void {
                     /** @var Payment|null $lockedPayment */
                     $lockedPayment = Payment::query()->whereKey($payment->id)->lockForUpdate()->first();
                     /** @var Invoice|null $lockedInvoice */
@@ -352,6 +351,10 @@ class PaymentController extends Controller
                     if ($lockedPayment) {
                         $paymentMeta = (array) ($lockedPayment->meta ?? []);
                         $paymentMeta['initiation_error'] = 'gateway_init_failed';
+                        $paymentMeta['initiation_error_message'] = collect($validationException->errors())
+                            ->flatten()
+                            ->filter()
+                            ->first() ?: 'Payment gateway initiation failed.';
 
                         $lockedPayment->update([
                             'status' => 'failed',
@@ -473,6 +476,7 @@ class PaymentController extends Controller
             $authority !== '' ? $authority : null,
             $statusInput !== '' ? $statusInput : null
         );
+        $gatewayMeta = (array) ($outcome['meta'] ?? []);
 
         $normalizedStatus = (string) ($outcome['status'] ?? 'failed');
         $normalizedReference = isset($data['reference']) && trim((string) $data['reference']) !== ''
@@ -489,7 +493,8 @@ class PaymentController extends Controller
             reference: $normalizedReference !== null && $normalizedReference !== '' ? $normalizedReference : null,
             reason: $normalizedReason !== null && $normalizedReason !== '' ? $normalizedReason : null,
             callbackToken: trim((string) $data['token']),
-            requireCallbackToken: true
+            requireCallbackToken: true,
+            gatewayMeta: $gatewayMeta
         );
 
         $payload = [
@@ -527,7 +532,8 @@ class PaymentController extends Controller
         ?string $reference,
         ?string $reason,
         ?string $callbackToken,
-        bool $requireCallbackToken
+        bool $requireCallbackToken,
+        array $gatewayMeta = []
     ): array {
         return DB::transaction(function () use (
             $paymentId,
@@ -536,7 +542,8 @@ class PaymentController extends Controller
             $reference,
             $reason,
             $callbackToken,
-            $requireCallbackToken
+            $requireCallbackToken,
+            $gatewayMeta
         ) {
             /** @var Payment|null $payment */
             $payment = Payment::query()->where('id', $paymentId)->lockForUpdate()->first();
@@ -584,6 +591,9 @@ class PaymentController extends Controller
             $paymentMeta['verified_at'] = now()->toAtomString();
             if ($reason) {
                 $paymentMeta['reason'] = $reason;
+            }
+            if ($gatewayMeta !== []) {
+                $paymentMeta['gateway_callback_log'] = $gatewayMeta;
             }
 
             $finalReference = $reference ?: $payment->reference;
