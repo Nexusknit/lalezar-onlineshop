@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller;
+use App\Support\Phone\IranPhoneNormalizer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -24,6 +25,12 @@ class ProfileController extends Controller
     public function update(Request $request): JsonResponse
     {
         $user = $request->user();
+
+        if ($request->has('phone')) {
+            $request->merge([
+                'phone' => IranPhoneNormalizer::normalizeNullableOrFail($request->input('phone')),
+            ]);
+        }
 
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:255'],

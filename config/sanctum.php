@@ -47,7 +47,7 @@ return [
     |
     */
 
-    'expiration' => null,
+    'expiration' => max((int) env('SANCTUM_TOKEN_EXPIRATION', 43200), 1),
 
     /*
     |--------------------------------------------------------------------------
@@ -59,7 +59,7 @@ return [
     |
     */
 
-    'impersonation_expiration' => (int) env('SANCTUM_IMPERSONATION_EXPIRATION', 60),
+    'impersonation_expiration' => max((int) env('SANCTUM_IMPERSONATION_EXPIRATION', 60), 1),
 
     /*
     |--------------------------------------------------------------------------

@@ -5,9 +5,13 @@ namespace Tests\Feature\Api;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
+use Database\Seeders\AdminUserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\DB;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class AuthAccessControlTest extends TestCase
@@ -99,6 +103,58 @@ class AuthAccessControlTest extends TestCase
         $this->assertTrue($permissionSlugs->contains('product.update'));
     }
 
+    public function test_verify_issues_expiring_token_and_logout_revokes_it(): void
+    {
+        $phone = '09120000019';
+        $otp = '123123';
+
+        Cache::put(
+            $this->challengeKey($phone),
+            [
+                'phone' => $phone,
+                'token' => $otp,
+                'expires_at' => now()->addMinutes(5),
+            ],
+            now()->addMinutes(5)
+        );
+
+        $verify = $this->postJson('/api/auth/verify', [
+            'phone' => $phone,
+            'token' => $otp,
+        ])->assertOk();
+
+        $this->assertNotNull($verify->json('expires_at'));
+        $this->assertDatabaseCount('personal_access_tokens', 1);
+        $this->assertNotNull(DB::table('personal_access_tokens')->value('expires_at'));
+
+        $this->withHeader('Authorization', 'Bearer '.$verify->json('token'))
+            ->postJson('/api/auth/logout')
+            ->assertOk()
+            ->assertJsonPath('message', 'Logged out successfully.');
+
+        $this->assertDatabaseCount('personal_access_tokens', 0);
+    }
+
+    public function test_admin_user_seeder_does_not_use_public_default_password(): void
+    {
+        config()->set('security.admin_seed.enabled', true);
+        config()->set('security.admin_seed.email', 'admin@lalezar.local');
+        config()->set('security.admin_seed.password', null);
+
+        Role::query()->create([
+            'name' => 'Super Admin',
+            'slug' => 'super-admin',
+            'guard_name' => 'web',
+        ]);
+
+        $this->seed(AdminUserSeeder::class);
+
+        $admin = User::query()->where('email', 'admin@lalezar.local')->firstOrFail();
+
+        $this->assertFalse(Hash::check('password', $admin->password));
+        $this->assertTrue($admin->roles()->where('slug', 'super-admin')->exists());
+    }
+
     public function test_login_is_rate_limited_after_five_attempts(): void
     {
         RateLimiter::clear('auth-login:127.0.0.1:09120000088');
@@ -116,6 +172,8 @@ class AuthAccessControlTest extends TestCase
 
     public function test_verify_is_rate_limited_after_ten_attempts(): void
     {
+        config()->set('otp.max_verify_attempts', 99);
+
         $phone = '09120000077';
         $correctToken = '123456';
 
@@ -144,6 +202,44 @@ class AuthAccessControlTest extends TestCase
         ])->assertStatus(429);
     }
 
+    public function test_otp_challenge_locks_after_repeated_invalid_codes(): void
+    {
+        config()->set('otp.max_verify_attempts', 3);
+        config()->set('otp.lock_minutes', 15);
+
+        $phone = '09120000078';
+        $correctToken = '123456';
+
+        Cache::put(
+            $this->challengeKey($phone),
+            [
+                'phone' => $phone,
+                'token' => $correctToken,
+                'expires_at' => now()->addMinutes(5),
+                'attempts' => 0,
+            ],
+            now()->addMinutes(5)
+        );
+
+        for ($i = 0; $i < 3; $i++) {
+            $this->postJson('/api/auth/verify', [
+                'phone' => $phone,
+                'token' => '000000',
+            ])->assertStatus(422);
+        }
+
+        $this->postJson('/api/auth/verify', [
+            'phone' => $phone,
+            'token' => $correctToken,
+        ])
+            ->assertStatus(429)
+            ->assertJsonPath('message', 'Too many invalid verification attempts. Please request a new code later.');
+
+        $this->postJson('/api/auth/login', [
+            'phone' => $phone,
+        ])->assertStatus(429);
+    }
+
     public function test_login_and_verify_accept_normalized_phone_input(): void
     {
         $formattedPhone = '+98 (912) 000-0066';
@@ -152,7 +248,7 @@ class AuthAccessControlTest extends TestCase
             'phone' => $formattedPhone,
         ])->assertOk();
 
-        $challenge = Cache::get($this->challengeKey('989120000066'));
+        $challenge = Cache::get($this->challengeKey('09120000066'));
         $this->assertIsArray($challenge);
         $token = (string) ($challenge['token'] ?? '');
         $this->assertNotSame('', $token);
@@ -162,7 +258,36 @@ class AuthAccessControlTest extends TestCase
             'token' => $token,
         ])->assertOk();
 
-        $this->assertSame('989120000066', $verify->json('user.phone'));
+        $this->assertSame('09120000066', $verify->json('user.phone'));
+    }
+
+    public function test_login_rejects_non_iranian_mobile_number(): void
+    {
+        $this->postJson('/api/auth/login', [
+            'phone' => '02112345678',
+        ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('phone');
+    }
+
+    public function test_profile_update_normalizes_mobile_number(): void
+    {
+        $user = User::factory()->create([
+            'phone' => '09120000031',
+            'accessibility' => true,
+        ]);
+        Sanctum::actingAs($user);
+
+        $this->patchJson('/api/user/profile', [
+            'phone' => '+98 912 000 0032',
+        ])
+            ->assertOk()
+            ->assertJsonPath('phone', '09120000032');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $user->id,
+            'phone' => '09120000032',
+        ]);
     }
 
     protected function challengeKey(string $phone): string

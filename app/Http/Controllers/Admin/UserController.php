@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\Phone\IranPhoneNormalizer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -94,6 +95,12 @@ class UserController extends Controller
     )]
     public function store(Request $request): JsonResponse
     {
+        if ($request->has('phone')) {
+            $request->merge([
+                'phone' => IranPhoneNormalizer::normalizeNullableOrFail($request->input('phone')),
+            ]);
+        }
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['nullable', 'string', 'email', 'max:255', 'unique:users,email'],
@@ -140,6 +147,12 @@ class UserController extends Controller
     )]
     public function update(Request $request, User $user): JsonResponse
     {
+        if ($request->has('phone')) {
+            $request->merge([
+                'phone' => IranPhoneNormalizer::normalizeNullableOrFail($request->input('phone')),
+            ]);
+        }
+
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:255'],
             'email' => [
@@ -234,17 +247,27 @@ class UserController extends Controller
             new OA\Response(response: 401, description: 'Unauthenticated'),
         ]
     )]
-    public function loginAsUser(User $user): JsonResponse
+    public function loginAsUser(Request $request, User $user): JsonResponse
     {
-        $minutes = max((int) config('sanctum.impersonation_expiration', 60), 1);
+        abort_if($request->user()?->is($user), 422, 'You cannot impersonate your own account.');
+        abort_if($user->accessibility === false, 422, 'Cannot impersonate a disabled account.');
+
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'min:8', 'max:500'],
+            'minutes' => ['sometimes', 'integer', 'min:1', 'max:'.max((int) config('sanctum.impersonation_expiration', 60), 1)],
+        ]);
+
+        $minutes = (int) ($data['minutes'] ?? config('sanctum.impersonation_expiration', 60));
+        $minutes = max($minutes, 1);
         $expiresAt = now()->addMinutes($minutes);
-        $token = $user->createToken('impersonation-token', ['*'], $expiresAt)->plainTextToken;
+        $token = $user->createToken('impersonation-token', ['impersonation'], $expiresAt)->plainTextToken;
 
         return response()->json([
             'message' => 'Impersonation started for the requested user.',
             'user' => $user->load(['roles', 'permissions']),
             'token' => $token,
             'expires_at' => $expiresAt->toISOString(),
+            'reason' => $data['reason'],
         ]);
     }
 
@@ -254,7 +277,7 @@ class UserController extends Controller
             return $data['email'];
         }
 
-        $numericPhone = preg_replace('/\D+/', '', (string) ($data['phone'] ?? ''));
+        $numericPhone = preg_replace('/\D+/', '', IranPhoneNormalizer::normalize($data['phone'] ?? null) ?? (string) ($data['phone'] ?? ''));
         $fallback = $numericPhone !== '' ? $numericPhone : Str::lower(Str::random(10));
 
         return sprintf('%s@phone.local', $fallback);

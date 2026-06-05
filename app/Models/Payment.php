@@ -28,6 +28,10 @@ class Payment extends Model
         'paid_at' => 'datetime',
     ];
 
+    protected $hidden = [
+        'meta',
+    ];
+
     public function invoice(): BelongsTo
     {
         return $this->belongsTo(Invoice::class);

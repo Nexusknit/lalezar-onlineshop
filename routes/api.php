@@ -41,6 +41,9 @@ Route::post('/auth/login', [AuthController::class, 'login'])
 Route::post('/auth/verify', [AuthController::class, 'verify'])
     ->middleware('throttle:auth-verify')
     ->name('auth.verify');
+Route::post('/auth/logout', [AuthController::class, 'logout'])
+    ->middleware(['auth:sanctum', 'throttle:user-api'])
+    ->name('auth.logout');
 
 Route::post('/cart/check', [CartController::class, 'check'])->name('cart.check');
 Route::post('/cart/coupon', [CouponController::class, 'preview'])->name('cart.coupon');
@@ -73,7 +76,7 @@ Route::prefix('home')
     });
 
 Route::prefix('user')
-    ->middleware(['auth:sanctum'])
+    ->middleware(['auth:sanctum', 'throttle:user-api'])
     ->as('user.')
     ->group(function (): void {
         Route::get('/profile', [UserProfileController::class, 'show'])->name('profile.show');
@@ -104,7 +107,7 @@ Route::prefix('user')
     });
 
 Route::prefix('admin')
-    ->middleware(['auth:sanctum'])
+    ->middleware(['auth:sanctum', 'throttle:admin-api', 'audit.admin'])
     ->as('admin.')
     ->group(function (): void {
         // Users

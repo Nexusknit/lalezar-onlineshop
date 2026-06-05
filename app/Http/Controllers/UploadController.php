@@ -16,12 +16,20 @@ class UploadController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $allowedDisks = (array) config('uploads.allowed_disks', ['public']);
+
         $validated = $request->validate([
-            'file' => ['required', 'file', 'image', 'max:5120'],
-            'disk' => ['sometimes', 'string', Rule::in(array_keys(config('filesystems.disks')))],
+            'file' => [
+                'required',
+                'file',
+                'image',
+                'mimes:'.implode(',', (array) config('uploads.image_mimes', ['jpg', 'jpeg', 'png', 'webp', 'gif'])),
+                'max:'.max((int) config('uploads.max_kilobytes', 5120), 1),
+            ],
+            'disk' => ['sometimes', 'string', Rule::in($allowedDisks)],
         ]);
 
-        $disk = $validated['disk'] ?? 'public';
+        $disk = $validated['disk'] ?? (string) config('uploads.default_disk', 'public');
 
         $path = $request->file('file')->store(
             'uploads/'.date('Y/m/d'),

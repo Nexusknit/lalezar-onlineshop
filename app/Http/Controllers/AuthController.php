@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Support\Auth\OtpNotificationService;
+use App\Support\Phone\IranPhoneNormalizer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -55,8 +56,8 @@ class AuthController extends Controller
             'phone' => ['required', 'string', 'max:30'],
         ]);
 
-        $phone = $this->normalizePhone($data['phone']);
-        abort_if($phone === null, 422, 'Phone number format is invalid.');
+        $phone = IranPhoneNormalizer::normalizeOrFail($data['phone']);
+        $this->abortIfOtpLocked($phone);
 
         $token = (string) random_int(100_000, 999_999);
         $ttlMinutes = max(1, (int) config('otp.ttl_minutes', 5));
@@ -65,6 +66,7 @@ class AuthController extends Controller
             'phone' => $phone,
             'token' => $token,
             'expires_at' => now()->addMinutes($ttlMinutes),
+            'attempts' => 0,
         ];
 
         Cache::put($this->challengeKey($phone), $challenge, now()->addMinutes($ttlMinutes));
@@ -127,8 +129,8 @@ class AuthController extends Controller
             'email' => ['nullable', 'string', 'email', 'max:255'],
         ]);
 
-        $phone = $this->normalizePhone($data['phone']);
-        abort_if($phone === null, 422, 'Phone number format is invalid.');
+        $phone = IranPhoneNormalizer::normalizeOrFail($data['phone']);
+        $this->abortIfOtpLocked($phone);
 
         $challenge = Cache::get($this->challengeKey($phone));
 
@@ -137,6 +139,8 @@ class AuthController extends Controller
         }
 
         if (($challenge['phone'] ?? null) !== $phone || ! hash_equals((string) ($challenge['token'] ?? ''), (string) $data['token'])) {
+            $this->registerFailedOtpAttempt($phone, $challenge);
+
             abort(422, 'Invalid phone number or verification code.');
         }
 
@@ -180,7 +184,8 @@ class AuthController extends Controller
 
         Cache::forget($this->challengeKey($phone));
 
-        $token = $user->createToken('auth-token')->plainTextToken;
+        $expiresAt = now()->addMinutes(max((int) config('sanctum.expiration', 43200), 1));
+        $token = $user->createToken('auth-token', ['*'], $expiresAt)->plainTextToken;
         $user->load([
             'roles:id,name,slug',
             'roles.permissions:id,name,slug',
@@ -199,6 +204,16 @@ class AuthController extends Controller
             'user' => $user,
             'permissions' => $permissions,
             'token' => $token,
+            'expires_at' => $expiresAt->toISOString(),
+        ]);
+    }
+
+    public function logout(Request $request): JsonResponse
+    {
+        $request->user()?->currentAccessToken()?->delete();
+
+        return response()->json([
+            'message' => 'Logged out successfully.',
         ]);
     }
 
@@ -208,7 +223,7 @@ class AuthController extends Controller
             return $data['email'];
         }
 
-        $numericPhone = preg_replace('/\D+/', '', $data['phone']);
+        $numericPhone = preg_replace('/\D+/', '', IranPhoneNormalizer::normalize($data['phone']) ?? $data['phone']);
         $fallback = $numericPhone !== '' ? $numericPhone : Str::lower(Str::random(10));
 
         return sprintf('%s@phone.local', $fallback);
@@ -216,23 +231,47 @@ class AuthController extends Controller
 
     protected function challengeKey(string $phone): string
     {
-        $normalized = preg_replace('/\D+/', '', $phone);
+        $normalized = IranPhoneNormalizer::normalize($phone) ?? preg_replace('/\D+/', '', $phone);
 
         return 'auth:challenge:'.$normalized;
     }
 
-    protected function normalizePhone(string $phone): ?string
+    protected function lockKey(string $phone): string
     {
-        $normalized = preg_replace('/\D+/', '', $phone);
+        return 'auth:otp-lock:'.(IranPhoneNormalizer::normalize($phone) ?? preg_replace('/\D+/', '', $phone));
+    }
 
-        if (! is_string($normalized) || $normalized === '') {
-            return null;
+    protected function abortIfOtpLocked(string $phone): void
+    {
+        if (Cache::has($this->lockKey($phone))) {
+            abort(429, 'Too many invalid verification attempts. Please request a new code later.');
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $challenge
+     */
+    protected function registerFailedOtpAttempt(string $phone, array $challenge): void
+    {
+        $maxAttempts = max(1, (int) config('otp.max_verify_attempts', 5));
+        $lockMinutes = max(1, (int) config('otp.lock_minutes', 15));
+        $attempts = (int) ($challenge['attempts'] ?? 0) + 1;
+
+        if ($attempts >= $maxAttempts) {
+            Cache::forget($this->challengeKey($phone));
+            Cache::put($this->lockKey($phone), [
+                'phone' => $phone,
+                'locked_at' => now()->toISOString(),
+                'attempts' => $attempts,
+            ], now()->addMinutes($lockMinutes));
+
+            return;
         }
 
-        if (! preg_match('/^\d{10,15}$/', $normalized)) {
-            return null;
-        }
+        $challenge['attempts'] = $attempts;
+        $expiresAt = $challenge['expires_at'] ?? now()->addMinutes(max(1, (int) config('otp.ttl_minutes', 5)));
+        $expiration = $expiresAt instanceof Carbon ? $expiresAt : Carbon::parse($expiresAt);
 
-        return $normalized;
+        Cache::put($this->challengeKey($phone), $challenge, $expiration->isFuture() ? $expiration : now()->addMinute());
     }
 }

@@ -467,6 +467,11 @@ class UserCommerceFlowTest extends TestCase
             ->assertJsonPath('payment.status', 'pending')
             ->assertJsonPath('gateway.provider', 'mock_gateway');
 
+        $this->assertArrayNotHasKey('meta', $firstInitiate->json('payment'));
+        if (is_array($firstInitiate->json('invoice.payments.0'))) {
+            $this->assertArrayNotHasKey('meta', $firstInitiate->json('invoice.payments.0'));
+        }
+
         $paymentId = (int) $firstInitiate->json('payment.id');
         $authority = (string) $firstInitiate->json('gateway.authority');
         $callbackToken = (string) $firstInitiate->json('gateway.callback_token');

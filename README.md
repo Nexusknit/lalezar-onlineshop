@@ -1,61 +1,103 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Lalezar Online Shop Backend
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+بک‌اند فروشگاه اینترنتی لوازم الکتریکی با Laravel 12 پیاده‌سازی شده و API اصلی فرانت‌اند Nuxt را فراهم می‌کند.
 
-## About Laravel
+## Stack
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- PHP 8.2+
+- Laravel 12
+- Laravel Sanctum برای احراز هویت API
+- SQLite برای اجرای local و test
+- MySQL برای محیط production پیشنهادی
+- Mock gateway برای توسعه و Shetabit/driver زرین‌پال برای پرداخت واقعی
+- Kavenegar به عنوان provider قابل تنظیم OTP
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## امکانات فعلی
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- ورود با OTP و صدور token
+- API عمومی محصولات، دسته‌بندی‌ها، برندها، خبرها، بلاگ، تیم، موقعیت‌ها و جست‌وجو
+- بررسی سبد خرید، اعمال کوپن، checkout و ثبت invoice
+- پرداخت mock و callback پرداخت
+- پنل کاربر شامل پروفایل، آدرس‌ها، علاقه‌مندی‌ها، دیدگاه‌ها، تیکت‌ها و فاکتورها
+- پنل مدیریت شامل کاربران، محصولات، دسته‌بندی‌ها، برندها، خبرها، بلاگ‌ها، نقش‌ها، مجوزها، دیدگاه‌ها، تیکت‌ها، استان/شهر و فاکتورها
+- تست‌های Feature برای قراردادهای API، احراز هویت، فلو خرید کاربر، فیلتر محصولات و seed smoke
 
-## Learning Laravel
+## راه‌اندازی local
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+```bash
+cp .env.example .env
+touch database/database.sqlite
+composer install
+php artisan key:generate
+php artisan migrate:fresh --seed
+php artisan serve --host=127.0.0.1 --port=8000
+```
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+برای اجرای local بدون MySQL این مقادیر در `.env` کافی هستند:
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+```dotenv
+APP_URL=http://127.0.0.1:8000
+APP_LOCALE=fa
+APP_FAKER_LOCALE=fa_IR
+DB_CONNECTION=sqlite
+DB_DATABASE=/absolute/path/to/lalezar-onlineshop/database/database.sqlite
+CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+PAYMENT_PROVIDER=mock_gateway
+PAYMENT_MOCK_ENABLED=true
+PAYMENT_FRONTEND_CALLBACK_URL=http://127.0.0.1:3000/payment/callback
+```
 
-## Laravel Sponsors
+## تست‌ها
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+```bash
+composer test
+php artisan test
+php artisan test --filter UserCommerceFlowTest
+```
 
-### Premium Partners
+`phpunit.xml` تست‌ها را با SQLite in-memory، queue sync و session/cache array اجرا می‌کند؛ بنابراین تست‌ها نباید به دیتابیس local یا سرویس خارجی وابسته باشند.
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+## پرداخت و OTP
 
-## Contributing
+- در local از `PAYMENT_PROVIDER=mock_gateway` استفاده شود.
+- پرداخت واقعی باید در فاز پرداخت با `shetabit/multipay` و driver زرین‌پال پیاده شود. فعلا برای production از placeholderهای `PAYMENT_SHETABIT_*` استفاده می‌شود.
+- OTP فقط با Kavenegar پشتیبانی می‌شود؛ اتصال واقعی فقط با `OTP_KAVENEGAR_ENABLED=true` و کلیدهای Kavenegar فعال شود.
+- ایمیل در مسیرهای فعلی اجباری نیست و می‌تواند روی `MAIL_MAILER=log` بماند. کاربرد production آن برای رسید سفارش، اعلان تیکت/پشتیبانی، هشدارهای مدیریتی و ایمیل‌های عملیاتی آینده است.
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## امنیت و production hardening
 
-## Code of Conduct
+- logout واقعی از مسیر `POST /api/auth/logout` انجام می‌شود و token فعلی Sanctum را revoke می‌کند.
+- tokenهای عادی با `SANCTUM_TOKEN_EXPIRATION` و tokenهای impersonation با `SANCTUM_IMPERSONATION_EXPIRATION` محدود می‌شوند.
+- شماره‌های موبایل ایران به فرم `09xxxxxxxxx` normalize می‌شوند و تلاش‌های اشتباه OTP با `OTP_VERIFY_MAX_ATTEMPTS` و `OTP_LOCK_MINUTES` قفل می‌شوند.
+- seed ادمین با `ADMIN_SEED_*` کنترل می‌شود و دیگر رمز public مثل `password` ندارد.
+- عملیات mutating پنل admin در جدول `audit_logs` ثبت می‌شود.
+- upload فقط روی diskهای تعریف‌شده در `UPLOAD_ALLOWED_DISKS` مجاز است.
+- `payment.meta` در JSON مخفی است تا توکن callback پرداخت از پاسخ‌های عمومی نشت نکند.
+- CORS باید در production فقط به دامنه‌های واقعی frontend محدود شود.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## اتصال اختیاری حسابداری
 
-## Security Vulnerabilities
+اتصال به نرم‌افزار حسابداری باید optional بماند و نباید checkout، پرداخت، ثبت invoice یا نمایش سفارش را در حالت غیرفعال مختل کند. طراحی پیشنهادی برای فازهای بعدی:
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+- تنظیمات admin برای فعال/غیرفعال کردن integration
+- adapter جدا برای هر نرم‌افزار حسابداری
+- sync کالا، موجودی و قیمت به صورت job/queue
+- ارسال invoice پرداخت‌شده به حسابداری بعد از تایید پرداخت
+- ثبت وضعیت sync و خطاها در جدول جدا
+- عدم rollback سفارش موفق سایت در صورت خطای سرویس حسابداری
 
-## License
+## فرمان‌های مفید
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+```bash
+php artisan route:list --path=api
+php artisan migrate:fresh --seed
+php artisan config:clear
+php artisan cache:clear
+php artisan test
+```
+
+## وضعیت فاز صفر
+
+وضعیت واقعی اجرای فاز صفر در فایل root پروژه ثبت شده است:
+
+`/Users/ehsntb/Documents/MyProjects/elektrika/PHASE_0_STATUS.md`

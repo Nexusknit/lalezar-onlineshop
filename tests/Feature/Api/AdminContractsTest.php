@@ -192,7 +192,7 @@ class AdminContractsTest extends TestCase
 
         $this->postJson('/api/admin/users', [
             'name' => 'Phone Only User',
-            'phone' => '09123334455',
+            'phone' => '+98 912 333 4455',
             'password' => 'secret123',
         ])
             ->assertCreated()
@@ -266,6 +266,22 @@ class AdminContractsTest extends TestCase
         Storage::disk('public')->assertExists($path);
     }
 
+    public function test_admin_upload_rejects_unconfigured_disk(): void
+    {
+        Storage::fake('public');
+        Storage::fake('local');
+
+        $admin = $this->createUserWithPermissions('upload.store');
+        Sanctum::actingAs($admin);
+
+        $this->post('/api/admin/uploads', [
+            'file' => UploadedFile::fake()->image('catalog.jpg'),
+            'disk' => 'local',
+        ], [
+            'Accept' => 'application/json',
+        ])->assertStatus(422);
+    }
+
     public function test_admin_impersonation_token_has_expiration(): void
     {
         $admin = $this->createUserWithPermissions('user.login');
@@ -273,9 +289,13 @@ class AdminContractsTest extends TestCase
 
         $target = User::factory()->create();
 
-        $response = $this->postJson("/api/admin/users/{$target->id}/impersonate")
+        $response = $this->postJson("/api/admin/users/{$target->id}/impersonate", [
+            'reason' => 'Customer support request',
+            'minutes' => 15,
+        ])
             ->assertOk()
-            ->assertJsonPath('user.id', $target->id);
+            ->assertJsonPath('user.id', $target->id)
+            ->assertJsonPath('reason', 'Customer support request');
 
         $this->assertNotNull($response->json('token'));
         $this->assertNotNull($response->json('expires_at'));
@@ -289,6 +309,26 @@ class AdminContractsTest extends TestCase
 
         $this->assertNotNull($tokenRow);
         $this->assertNotNull($tokenRow->expires_at);
+        $this->assertSame('["impersonation"]', $tokenRow->abilities);
+        $this->assertDatabaseHas('audit_logs', [
+            'actor_id' => $admin->id,
+            'auditable_type' => User::class,
+            'auditable_id' => $target->id,
+            'route_name' => 'admin.users.impersonate',
+            'status_code' => 200,
+        ]);
+    }
+
+    public function test_admin_impersonation_requires_reason(): void
+    {
+        $admin = $this->createUserWithPermissions('user.login');
+        Sanctum::actingAs($admin);
+
+        $target = User::factory()->create();
+
+        $this->postJson("/api/admin/users/{$target->id}/impersonate")
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('reason');
     }
 
     public function test_admin_can_update_invoice_status_when_transition_is_allowed(): void
@@ -313,6 +353,13 @@ class AdminContractsTest extends TestCase
         $this->assertDatabaseHas('invoices', [
             'id' => $invoice->id,
             'status' => InvoiceStatusService::PAYMENT_PENDING,
+        ]);
+        $this->assertDatabaseHas('audit_logs', [
+            'actor_id' => $admin->id,
+            'auditable_type' => Invoice::class,
+            'auditable_id' => $invoice->id,
+            'route_name' => 'admin.invoices.status.update',
+            'status_code' => 200,
         ]);
     }
 

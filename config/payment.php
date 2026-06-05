@@ -10,12 +10,21 @@ return [
             'enabled' => (bool) env('PAYMENT_MOCK_ENABLED', true),
         ],
 
+        'shetabit' => [
+            'enabled' => (bool) env('PAYMENT_SHETABIT_ENABLED', false),
+            'driver' => env('PAYMENT_SHETABIT_DRIVER', 'zarinpal'),
+            'merchant_id' => env('PAYMENT_SHETABIT_MERCHANT_ID'),
+            'sandbox' => (bool) env('PAYMENT_SHETABIT_SANDBOX', true),
+            'timeout' => (int) env('PAYMENT_SHETABIT_TIMEOUT', 10),
+            'description' => env('PAYMENT_DESCRIPTION', 'پرداخت سفارش فروشگاه لوازم الکتریکی'),
+        ],
+
         'zarinpal' => [
             'enabled' => (bool) env('PAYMENT_ZARINPAL_ENABLED', false),
             'merchant_id' => env('PAYMENT_ZARINPAL_MERCHANT_ID'),
             'sandbox' => (bool) env('PAYMENT_ZARINPAL_SANDBOX', true),
             'timeout' => (int) env('PAYMENT_ZARINPAL_TIMEOUT', 10),
-            'description' => env('PAYMENT_ZARINPAL_DESCRIPTION', 'پرداخت سفارش فروشگاه لاله‌زار'),
+            'description' => env('PAYMENT_DESCRIPTION', 'پرداخت سفارش فروشگاه لوازم الکتریکی'),
         ],
     ],
 ];

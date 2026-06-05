@@ -3,6 +3,8 @@
 return [
     'provider' => env('OTP_PROVIDER', 'kavenegar'),
     'ttl_minutes' => max(1, (int) env('OTP_TTL_MINUTES', 5)),
+    'max_verify_attempts' => max(1, (int) env('OTP_VERIFY_MAX_ATTEMPTS', 5)),
+    'lock_minutes' => max(1, (int) env('OTP_LOCK_MINUTES', 15)),
 
     'providers' => [
         'kavenegar' => [
@@ -14,4 +16,3 @@ return [
         ],
     ],
 ];
-

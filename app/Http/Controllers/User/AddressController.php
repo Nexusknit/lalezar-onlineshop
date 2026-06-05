@@ -4,6 +4,7 @@ namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller;
 use App\Models\Address;
+use App\Support\Phone\IranPhoneNormalizer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -33,6 +34,12 @@ class AddressController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        if ($request->has('phone')) {
+            $request->merge([
+                'phone' => IranPhoneNormalizer::normalizeNullableOrFail($request->input('phone')),
+            ]);
+        }
+
         $data = $request->validate([
             'city_id' => ['required', 'integer', Rule::exists('cities', 'id')],
             'label' => ['nullable', 'string', 'max:255'],
@@ -63,6 +70,12 @@ class AddressController extends Controller
     public function update(Request $request, Address $address): JsonResponse
     {
         $address = $this->resolveAddress($request, $address);
+
+        if ($request->has('phone')) {
+            $request->merge([
+                'phone' => IranPhoneNormalizer::normalizeNullableOrFail($request->input('phone')),
+            ]);
+        }
 
         $data = $request->validate([
             'city_id' => ['sometimes', 'integer', Rule::exists('cities', 'id')],
