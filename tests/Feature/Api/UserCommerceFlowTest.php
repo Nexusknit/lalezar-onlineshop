@@ -24,6 +24,11 @@ class UserCommerceFlowTest extends TestCase
 
     public function test_cart_coupon_preview_returns_discount_summary(): void
     {
+        Config::set('checkout.shipping.flat_fee', 15000);
+        Config::set('checkout.shipping.free_threshold', null);
+        Config::set('checkout.tax.enabled', true);
+        Config::set('checkout.tax.rate_percent', 10);
+
         $creator = User::factory()->create();
         $product = Product::query()->create([
             'creator_id' => $creator->id,
@@ -58,8 +63,49 @@ class UserCommerceFlowTest extends TestCase
             ->assertJsonPath('coupon.code', 'WELCOME10')
             ->assertJsonPath('summary.subtotal', 200000)
             ->assertJsonPath('summary.discount', 20000)
-            ->assertJsonPath('summary.total', 180000)
+            ->assertJsonPath('summary.subtotal_after_discount', 180000)
+            ->assertJsonPath('summary.shipping', 15000)
+            ->assertJsonPath('summary.tax', 19500)
+            ->assertJsonPath('summary.total', 214500)
             ->assertJsonPath('summary.currency', 'IRR');
+    }
+
+    public function test_cart_check_returns_server_side_pricing_summary(): void
+    {
+        Config::set('checkout.shipping.flat_fee', 12000);
+        Config::set('checkout.shipping.free_threshold', null);
+        Config::set('checkout.tax.enabled', true);
+        Config::set('checkout.tax.rate_percent', 10);
+
+        $creator = User::factory()->create();
+        $product = Product::query()->create([
+            'creator_id' => $creator->id,
+            'name' => 'محافظ برق شش خانه',
+            'slug' => 'power-strip-cart-summary',
+            'sku' => 'ELC-CART-001',
+            'stock' => 8,
+            'price' => 100000,
+            'currency' => 'IRR',
+            'status' => 'active',
+        ]);
+
+        $this->postJson('/api/cart/check', [
+            'items' => [
+                [
+                    'product_id' => $product->id,
+                    'quantity' => 2,
+                ],
+            ],
+        ])
+            ->assertOk()
+            ->assertJsonPath('items.0.available', true)
+            ->assertJsonPath('summary.subtotal', 200000)
+            ->assertJsonPath('summary.discount', 0)
+            ->assertJsonPath('summary.shipping', 12000)
+            ->assertJsonPath('summary.tax', 21200)
+            ->assertJsonPath('summary.total', 233200)
+            ->assertJsonPath('summary.currency', 'IRR')
+            ->assertJsonPath('summary.can_checkout', true);
     }
 
     public function test_authenticated_user_can_manage_addresses_and_checkout(): void

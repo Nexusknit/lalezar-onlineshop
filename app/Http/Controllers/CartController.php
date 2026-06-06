@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Product;
+use App\Support\Checkout\CheckoutPricingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use OpenApi\Attributes as OA;
@@ -97,8 +98,25 @@ class CartController extends Controller
             ];
         });
 
+        $currency = $products->pluck('currency')->filter()->unique()->count() === 1
+            ? $products->first()?->currency
+            : null;
+        $subtotal = round((float) $results->sum('total'), 2);
+        $pricing = CheckoutPricingService::calculate($subtotal);
+
         return response()->json([
             'items' => $results,
+            'summary' => [
+                'subtotal' => $subtotal,
+                'discount' => 0,
+                'shipping' => $pricing['shipping'],
+                'tax' => $pricing['tax'],
+                'total' => $pricing['total'],
+                'currency' => $currency,
+                'can_checkout' => $results->every(
+                    fn (array $result): bool => (bool) ($result['available'] ?? false)
+                ),
+            ],
         ]);
     }
 }

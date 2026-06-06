@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Product;
+use App\Support\Checkout\CheckoutPricingService;
 use App\Support\Coupons\CouponService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -56,7 +57,8 @@ class CouponController extends Controller
         );
 
         $discount = $coupon->calculateDiscount($subtotal);
-        $total = round(max(0, $subtotal - $discount), 2);
+        $subtotalAfterDiscount = round(max(0, $subtotal - $discount), 2);
+        $pricing = CheckoutPricingService::calculate($subtotalAfterDiscount);
 
         return response()->json([
             'coupon' => [
@@ -70,8 +72,12 @@ class CouponController extends Controller
             'summary' => [
                 'subtotal' => round($subtotal, 2),
                 'discount' => $discount,
-                'total' => $total,
+                'subtotal_after_discount' => $subtotalAfterDiscount,
+                'shipping' => $pricing['shipping'],
+                'tax' => $pricing['tax'],
+                'total' => $pricing['total'],
                 'currency' => $currency,
+                'can_checkout' => true,
             ],
         ]);
     }
