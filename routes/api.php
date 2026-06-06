@@ -1,8 +1,10 @@
 <?php
 
+use App\Http\Controllers\Admin\AccountingController;
 use App\Http\Controllers\Admin\BlogController;
 use App\Http\Controllers\Admin\BrandController as AdminBrandController;
 use App\Http\Controllers\Admin\CategoryController;
+use App\Http\Controllers\Admin\CityController as AdminCityController;
 use App\Http\Controllers\Admin\CommentController;
 use App\Http\Controllers\Admin\CouponController as AdminCouponController;
 use App\Http\Controllers\Admin\DashboardController;
@@ -12,15 +14,13 @@ use App\Http\Controllers\Admin\PermissionController;
 use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\RelationController;
 use App\Http\Controllers\Admin\RoleController;
-use App\Http\Controllers\Admin\StateController;
 use App\Http\Controllers\Admin\SettingController;
-use App\Http\Controllers\Admin\CityController as AdminCityController;
+use App\Http\Controllers\Admin\StateController;
 use App\Http\Controllers\Admin\TicketController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\CouponController;
-use App\Http\Controllers\UploadController;
 use App\Http\Controllers\Home\BlogsController as HomeBlogsController;
 use App\Http\Controllers\Home\BrandController as HomeBrandController;
 use App\Http\Controllers\Home\CategoryController as HomeCategoryController;
@@ -30,9 +30,10 @@ use App\Http\Controllers\Home\ProductController as HomeProductController;
 use App\Http\Controllers\Home\SearchController as HomeSearchController;
 use App\Http\Controllers\Home\TeamController as HomeTeamController;
 use App\Http\Controllers\PaymentController;
-use App\Http\Controllers\User\FavoriteController as UserFavoriteController;
+use App\Http\Controllers\UploadController;
 use App\Http\Controllers\User\AddressController as UserAddressController;
 use App\Http\Controllers\User\CommentController as UserCommentController;
+use App\Http\Controllers\User\FavoriteController as UserFavoriteController;
 use App\Http\Controllers\User\ProfileController as UserProfileController;
 use App\Http\Controllers\User\TicketController as UserTicketController;
 use App\Http\Middleware\ForceJsonResponse;
@@ -221,4 +222,11 @@ Route::prefix('admin')
         // Settings
         Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
         Route::put('/settings', [SettingController::class, 'update'])->name('settings.update');
+
+        // Optional accounting integration
+        Route::get('/accounting', [AccountingController::class, 'index'])->name('accounting.index');
+        Route::post('/accounting/test', [AccountingController::class, 'testConnection'])->name('accounting.test');
+        Route::post('/accounting/products/sync', [AccountingController::class, 'syncProducts'])->name('accounting.products.sync');
+        Route::post('/accounting/invoices/{invoice}/sync', [AccountingController::class, 'syncInvoice'])->name('accounting.invoices.sync');
+        Route::post('/accounting/logs/{syncLog}/retry', [AccountingController::class, 'retry'])->name('accounting.logs.retry');
     });

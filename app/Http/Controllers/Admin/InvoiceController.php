@@ -103,7 +103,17 @@ class InvoiceController extends Controller
     public function detail(Invoice $invoice): JsonResponse
     {
         return response()->json(
-            $invoice->load(['user', 'address', 'coupon', 'items.product', 'payments', 'tags', 'categories'])
+            $invoice->load([
+                'user',
+                'address',
+                'coupon',
+                'items.product',
+                'payments',
+                'tags',
+                'categories',
+                'accountingMapping',
+                'accountingSyncLogs' => static fn ($query) => $query->latest()->limit(10),
+            ])
         );
     }
 
@@ -214,7 +224,17 @@ class InvoiceController extends Controller
                 );
             }
 
-            return $lockedInvoice->fresh()->load(['user', 'address', 'coupon', 'items.product', 'payments', 'tags', 'categories']);
+            return $lockedInvoice->fresh()->load([
+                'user',
+                'address',
+                'coupon',
+                'items.product',
+                'payments',
+                'tags',
+                'categories',
+                'accountingMapping',
+                'accountingSyncLogs' => static fn ($query) => $query->latest()->limit(10),
+            ]);
         });
 
         return response()->json($updatedInvoice);

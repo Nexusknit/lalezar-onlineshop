@@ -81,7 +81,7 @@ php artisan view:cache
 
 ```bash
 * * * * * cd /home/USER/path/to/lalezar-onlineshop && /usr/local/bin/php artisan schedule:run >> /dev/null 2>&1
-* * * * * cd /home/USER/path/to/lalezar-onlineshop && /usr/local/bin/php artisan queue:work --stop-when-empty --tries=3 --timeout=90 >> /dev/null 2>&1
+* * * * * cd /home/USER/path/to/lalezar-onlineshop && /usr/local/bin/php artisan queue:work --queue=default,accounting --stop-when-empty --tries=3 --timeout=90 >> /dev/null 2>&1
 ```
 
 مسیر PHP روی هر هاست ممکن است متفاوت باشد؛ در cPanel بخش Terminal یا Select PHP Version مسیر درست را بررسی کنید.
@@ -96,4 +96,27 @@ php artisan view:cache
 
 ## Optional Accounting Integration
 
-اتصال حسابداری در production باید پیش‌فرض خاموش باشد. وقتی در فاز حسابداری اضافه شد، envهای آن باید مستقل از checkout و payment باشند تا خاموش بودن حسابداری هیچ اثری روی ثبت سفارش و پرداخت نگذارد.
+اتصال حسابداری در production پیش‌فرض خاموش است و envهای آن مستقل از checkout و payment هستند:
+
+```dotenv
+ACCOUNTING_ENABLED=false
+ACCOUNTING_PROVIDER=generic_rest
+ACCOUNTING_BASE_URL=https://accounting.example.com/api
+ACCOUNTING_TOKEN=
+ACCOUNTING_API_KEY=
+ACCOUNTING_API_KEY_HEADER=X-API-Key
+ACCOUNTING_HEALTH_PATH=/health
+ACCOUNTING_PRODUCTS_PATH=/products
+ACCOUNTING_INVOICES_PATH=/invoices
+ACCOUNTING_PRODUCT_SYNC_ENABLED=true
+ACCOUNTING_INVOICE_SYNC_ENABLED=true
+ACCOUNTING_AUTOMATIC_PRODUCT_SYNC=false
+ACCOUNTING_PRODUCT_SYNC_CRON="0 * * * *"
+ACCOUNTING_QUEUE=accounting
+```
+
+- credentialها فقط در env ثبت می‌شوند.
+- queue worker باید صف `accounting` را پردازش کند.
+- scheduler برای sync زمان‌بندی‌شده کالا باید فعال باشد.
+- قبل از فعال‌سازی، تست اتصال و نمونه واقعی payload کالا و فاکتور با مستندات provider بررسی شود.
+- جزئیات قرارداد عمومی در `docs/ACCOUNTING_INTEGRATION.md` قرار دارد.

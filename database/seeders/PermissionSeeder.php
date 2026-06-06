@@ -119,6 +119,12 @@ class PermissionSeeder extends Seeder
             // Settings
             'setting.all',
             'setting.update',
+
+            // Accounting
+            'accounting.view',
+            'accounting.test',
+            'accounting.sync',
+            'accounting.retry',
         ];
 
         foreach ($permissions as $slug) {
@@ -155,6 +161,7 @@ class PermissionSeeder extends Seeder
             'invoice' => 'فاکتور',
             'relation' => 'ارتباط',
             'setting' => 'تنظیمات',
+            'accounting' => 'حسابداری',
         ];
         $actions = [
             'view' => 'مشاهده',
@@ -175,6 +182,9 @@ class PermissionSeeder extends Seeder
             'detail' => 'جزئیات',
             'user' => 'فاکتورهای کاربر',
             'updateStatus' => 'تغییر وضعیت',
+            'test' => 'تست اتصال',
+            'sync' => 'همگام‌سازی',
+            'retry' => 'تلاش مجدد',
             'attachCategory' => 'اتصال دسته',
             'attachTag' => 'اتصال تگ',
             'attachAttribute' => 'اتصال ویژگی',

@@ -44,6 +44,8 @@ This repository is the Laravel backend API for the electrical supplies online sh
 - Stock and coupon allocation changes must stay transactional and lock relevant rows.
 - Runtime merchant settings are stored through `app/Support/Settings/StoreSettingService.php`; code must retain config/env fallbacks when a setting has not been saved.
 - Admin dashboard, coupon, moderation, support, access-control, invoice, and settings endpoints must remain permission-aware and covered by feature tests.
+- Optional accounting integration boundaries live in `app/Support/Accounting`; provider-specific details must implement `AccountingProviderInterface` without entering checkout core.
+- Accounting sync must use the outbox/log tables and queued jobs. A provider or queue failure must never revert a successful local payment.
 
 ## Conventions
 
@@ -53,6 +55,7 @@ This repository is the Laravel backend API for the electrical supplies online sh
 - Public endpoints should only return active/published entities unless a use case explicitly requires otherwise.
 - Admin endpoints must require Sanctum auth and permission middleware.
 - Payment credentials, SMS keys, and future accounting credentials must never be persisted in the general settings table.
+- Accounting tokens/API keys remain environment-only; base URL, paths and feature switches may be managed as non-secret settings.
 - Add or update feature tests for checkout, payment, inventory, authorization, and accounting integration behavior.
 - Keep `.env.example` aligned with any new config keys.
 

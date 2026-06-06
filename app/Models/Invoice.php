@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -65,6 +66,16 @@ class Invoice extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
+    }
+
+    public function accountingMapping(): HasOne
+    {
+        return $this->hasOne(AccountingInvoiceMapping::class);
+    }
+
+    public function accountingSyncLogs(): MorphMany
+    {
+        return $this->morphMany(AccountingSyncLog::class, 'syncable');
     }
 
     public function tags(): MorphToMany

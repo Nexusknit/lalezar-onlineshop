@@ -2,14 +2,15 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute as CastsAttribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Casts\Attribute as CastsAttribute;
 use Illuminate\Support\Str;
 use Spatie\Searchable\Searchable;
 use Spatie\Searchable\SearchResult;
@@ -51,6 +52,16 @@ class Product extends Model implements Searchable
     public function items(): HasMany
     {
         return $this->hasMany(Item::class);
+    }
+
+    public function accountingMapping(): HasOne
+    {
+        return $this->hasOne(AccountingProductMapping::class);
+    }
+
+    public function accountingSyncLogs(): MorphMany
+    {
+        return $this->morphMany(AccountingSyncLog::class, 'syncable');
     }
 
     public function brands(): MorphToMany

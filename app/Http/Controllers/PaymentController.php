@@ -8,6 +8,7 @@ use App\Models\Invoice;
 use App\Models\Item;
 use App\Models\Payment;
 use App\Models\Product;
+use App\Support\Accounting\AccountingOutboxService;
 use App\Support\Checkout\CheckoutPricingService;
 use App\Support\Coupons\CouponService;
 use App\Support\Invoices\InvoiceAllocationService;
@@ -27,7 +28,8 @@ class PaymentController extends Controller
 {
     public function __construct(
         protected InvoiceAllocationService $invoiceAllocationService,
-        protected PaymentGatewayService $paymentGatewayService
+        protected PaymentGatewayService $paymentGatewayService,
+        protected AccountingOutboxService $accountingOutboxService
     ) {
         $this->middleware('auth:sanctum')->except('callback');
     }
@@ -439,6 +441,8 @@ class PaymentController extends Controller
             requireCallbackToken: false
         );
 
+        $this->queueAccountingSync($result);
+
         return response()->json([
             'message' => $result['already_processed']
                 ? 'Payment has already been processed.'
@@ -503,6 +507,8 @@ class PaymentController extends Controller
             requireCallbackToken: true,
             gatewayMeta: $gatewayMeta
         );
+
+        $this->queueAccountingSync($result);
 
         $payload = [
             'message' => $result['already_processed']
@@ -653,6 +659,16 @@ class PaymentController extends Controller
             'address.city.state',
             'coupon',
         ]);
+    }
+
+    /**
+     * @param  array{payment:Payment,invoice:Invoice,already_processed:bool}  $result
+     */
+    protected function queueAccountingSync(array $result): void
+    {
+        if (! $result['already_processed'] && (string) $result['invoice']->status === InvoiceStatusService::PAID) {
+            $this->accountingOutboxService->dispatchPaidInvoiceSafely($result['invoice']);
+        }
     }
 
     protected function generateInvoiceNumber(): string

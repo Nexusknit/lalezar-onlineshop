@@ -11,7 +11,7 @@ use Illuminate\Validation\Rule;
 
 class SettingController extends Controller
 {
-    private const GROUPS = ['general', 'payment', 'shipping'];
+    private const GROUPS = ['general', 'payment', 'shipping', 'accounting'];
 
     public function __construct()
     {
@@ -40,6 +40,13 @@ class SettingController extends Controller
                 'site_url' => config('app.url'),
                 'payment_driver' => config('payment.default', env('PAYMENT_DRIVER', 'mock')),
                 'sms_driver' => config('otp.driver', env('OTP_DRIVER', 'log')),
+                'accounting_provider' => config('accounting.provider', 'generic_rest'),
+                'accounting_base_url' => config('accounting.base_url'),
+                'accounting_health_path' => config('accounting.health_path', '/health'),
+                'accounting_products_path' => config('accounting.products_path', '/products'),
+                'accounting_invoices_path' => config('accounting.invoices_path', '/invoices'),
+                'accounting_credentials_configured' => trim((string) config('accounting.token', '')) !== ''
+                    || trim((string) config('accounting.api_key', '')) !== '',
                 'secrets_managed_by_env' => true,
             ],
         ]);
@@ -52,6 +59,26 @@ class SettingController extends Controller
             'settings' => ['required', 'array'],
             'settings.*' => ['nullable'],
         ]);
+
+        if ($data['group'] === 'accounting') {
+            validator($data['settings'], [
+                'enabled' => ['sometimes', 'boolean'],
+                'provider' => ['sometimes', Rule::in(['generic_rest'])],
+                'base_url' => ['nullable', 'url:http,https', 'max:500'],
+                'health_path' => ['sometimes', 'string', 'max:200', 'regex:/^\\//'],
+                'products_path' => ['sometimes', 'string', 'max:200', 'regex:/^\\//'],
+                'invoices_path' => ['sometimes', 'string', 'max:200', 'regex:/^\\//'],
+                'product_sync_enabled' => ['sometimes', 'boolean'],
+                'invoice_sync_enabled' => ['sometimes', 'boolean'],
+                'automatic_product_sync' => ['sometimes', 'boolean'],
+            ])->validate();
+
+            $forbiddenKeys = array_intersect(
+                array_keys($data['settings']),
+                ['token', 'api_key', 'password', 'secret', 'credentials']
+            );
+            abort_if($forbiddenKeys !== [], 422, 'Accounting credentials must be managed through environment variables.');
+        }
 
         DB::transaction(function () use ($data): void {
             foreach ($data['settings'] as $key => $value) {

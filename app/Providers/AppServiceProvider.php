@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Support\Accounting\Contracts\AccountingProviderInterface;
+use App\Support\Accounting\Providers\GenericRestAccountingProvider;
 use App\Support\Phone\IranPhoneNormalizer;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -15,7 +17,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(AccountingProviderInterface::class, GenericRestAccountingProvider::class);
     }
 
     /**
