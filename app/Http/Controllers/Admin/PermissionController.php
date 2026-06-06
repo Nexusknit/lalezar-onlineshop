@@ -38,6 +38,12 @@ class PermissionController extends Controller
         $perPage = $perPage > 0 ? min($perPage, 100) : 15;
 
         $permissions = Permission::query()
+            ->when($request->filled('search'), function ($query) use ($request): void {
+                $term = trim((string) $request->string('search'));
+                $query->where(fn ($query) => $query
+                    ->where('name', 'like', "%{$term}%")
+                    ->orWhere('slug', 'like', "%{$term}%"));
+            })
             ->latest()
             ->paginate($perPage);
 

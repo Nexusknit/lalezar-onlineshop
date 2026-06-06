@@ -27,6 +27,13 @@ class BrandController extends Controller
 
         $brands = Brand::query()
             ->with(['products:id'])
+            ->when($request->filled('search'), function ($query) use ($request): void {
+                $term = trim((string) $request->string('search'));
+                $query->where(function ($query) use ($term): void {
+                    $query->where('name', 'like', "%{$term}%")
+                        ->orWhere('slug', 'like', "%{$term}%");
+                });
+            })
             ->when($request->filled('status'), static function ($query) use ($request) {
                 $query->where('status', $request->string('status'));
             })

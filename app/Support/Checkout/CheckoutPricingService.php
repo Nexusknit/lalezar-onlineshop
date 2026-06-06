@@ -2,6 +2,8 @@
 
 namespace App\Support\Checkout;
 
+use App\Support\Settings\StoreSettingService;
+
 class CheckoutPricingService
 {
     /**
@@ -22,8 +24,21 @@ class CheckoutPricingService
 
     protected static function resolveShipping(float $subtotalAfterDiscount): float
     {
-        $flatFee = self::normalizeMoney((float) config('checkout.shipping.flat_fee', 0));
-        $freeThresholdRaw = config('checkout.shipping.free_threshold');
+        $enabled = StoreSettingService::boolean('shipping', 'enabled', true);
+        if (! $enabled) {
+            return 0.0;
+        }
+
+        $flatFee = self::normalizeMoney(StoreSettingService::number(
+            'shipping',
+            'default_shipping_fee',
+            (float) config('checkout.shipping.flat_fee', 0)
+        ));
+        $freeThresholdRaw = StoreSettingService::value(
+            'shipping',
+            'free_shipping_threshold',
+            config('checkout.shipping.free_threshold')
+        );
         $freeThreshold = is_numeric($freeThresholdRaw)
             ? self::normalizeMoney((float) $freeThresholdRaw)
             : null;

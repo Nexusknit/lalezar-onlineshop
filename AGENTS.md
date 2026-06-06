@@ -42,6 +42,8 @@ This repository is the Laravel backend API for the electrical supplies online sh
 - Payment configuration must stay environment-driven. `APP_URL` is the default gateway callback base, `FRONTEND_URL` is the default payment result URL base, and gateway-specific callback envs should only override those when the domains differ.
 - Invoice status transitions must go through `InvoiceStatusService::canTransition(...)`.
 - Stock and coupon allocation changes must stay transactional and lock relevant rows.
+- Runtime merchant settings are stored through `app/Support/Settings/StoreSettingService.php`; code must retain config/env fallbacks when a setting has not been saved.
+- Admin dashboard, coupon, moderation, support, access-control, invoice, and settings endpoints must remain permission-aware and covered by feature tests.
 
 ## Conventions
 
@@ -50,6 +52,7 @@ This repository is the Laravel backend API for the electrical supplies online sh
 - Do not trust client-supplied totals, shipping, tax, discount, or status.
 - Public endpoints should only return active/published entities unless a use case explicitly requires otherwise.
 - Admin endpoints must require Sanctum auth and permission middleware.
+- Payment credentials, SMS keys, and future accounting credentials must never be persisted in the general settings table.
 - Add or update feature tests for checkout, payment, inventory, authorization, and accounting integration behavior.
 - Keep `.env.example` aligned with any new config keys.
 

@@ -4,7 +4,6 @@ namespace Database\Seeders;
 
 use App\Models\Permission;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Str;
 
 class PermissionSeeder extends Seeder
 {
@@ -14,6 +13,9 @@ class PermissionSeeder extends Seeder
     public function run(): void
     {
         $permissions = [
+            // Dashboard
+            'dashboard.view',
+
             // Users
             'user.all',
             'user.store',
@@ -59,7 +61,9 @@ class PermissionSeeder extends Seeder
             'permission.update',
 
             // Tickets
+            'ticket.all',
             'ticket.store',
+            'ticket.update',
             'ticket.sendMessage',
 
             // Categories
@@ -86,9 +90,17 @@ class PermissionSeeder extends Seeder
             'city.update',
 
             // Comments
+            'comment.all',
             'comment.release',
+            'comment.reject',
             'comment.answer',
             'comment.specialize',
+
+            // Coupons
+            'coupon.all',
+            'coupon.store',
+            'coupon.update',
+            'coupon.delete',
 
             // Invoices
             'invoice.all',
@@ -103,16 +115,73 @@ class PermissionSeeder extends Seeder
             'relation.attachAttribute',
             'relation.attachLike',
             'relation.attachGallery',
+
+            // Settings
+            'setting.all',
+            'setting.update',
         ];
 
         foreach ($permissions as $slug) {
             Permission::query()->updateOrCreate(
                 ['slug' => $slug],
                 [
-                    'name' => Str::headline($slug),
+                    'name' => $this->persianName($slug),
                     'guard_name' => 'web',
                 ],
             );
         }
+    }
+
+    private function persianName(string $slug): string
+    {
+        [$resource, $action] = array_pad(explode('.', $slug, 2), 2, '');
+
+        $resources = [
+            'dashboard' => 'داشبورد',
+            'user' => 'کاربر',
+            'blog' => 'وبلاگ',
+            'news' => 'خبر',
+            'product' => 'محصول',
+            'upload' => 'فایل',
+            'role' => 'نقش',
+            'permission' => 'مجوز',
+            'ticket' => 'تیکت',
+            'category' => 'دسته‌بندی',
+            'brand' => 'برند',
+            'state' => 'استان',
+            'city' => 'شهر',
+            'comment' => 'نظر',
+            'coupon' => 'کوپن',
+            'invoice' => 'فاکتور',
+            'relation' => 'ارتباط',
+            'setting' => 'تنظیمات',
+        ];
+        $actions = [
+            'view' => 'مشاهده',
+            'all' => 'مشاهده',
+            'store' => 'ایجاد',
+            'update' => 'ویرایش',
+            'delete' => 'حذف',
+            'activate' => 'فعال‌سازی',
+            'specialize' => 'ویژه‌سازی',
+            'accessibility' => 'تخصیص دسترسی',
+            'login' => 'ورود جایگزین',
+            'syncPermission' => 'اتصال مجوز',
+            'sendMessage' => 'ارسال پیام',
+            'release' => 'انتشار',
+            'reject' => 'رد',
+            'answer' => 'پاسخ',
+            'items' => 'اقلام',
+            'detail' => 'جزئیات',
+            'user' => 'فاکتورهای کاربر',
+            'updateStatus' => 'تغییر وضعیت',
+            'attachCategory' => 'اتصال دسته',
+            'attachTag' => 'اتصال تگ',
+            'attachAttribute' => 'اتصال ویژگی',
+            'attachLike' => 'اتصال پسند',
+            'attachGallery' => 'اتصال گالری',
+        ];
+
+        return trim(($actions[$action] ?? $action).' '.($resources[$resource] ?? $resource));
     }
 }

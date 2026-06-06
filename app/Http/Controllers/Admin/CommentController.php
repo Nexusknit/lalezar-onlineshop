@@ -12,9 +12,43 @@ class CommentController extends Controller
 {
     public function __construct()
     {
+        $this->middleware('permission:comment.all')->only(['index', 'show']);
         $this->middleware('permission:comment.release')->only('release');
+        $this->middleware('permission:comment.reject')->only('reject');
         $this->middleware('permission:comment.answer')->only('answer');
         $this->middleware('permission:comment.specialize')->only('specialize');
+    }
+
+    public function index(Request $request): JsonResponse
+    {
+        $perPage = max(1, min((int) $request->integer('per_page', 15), 100));
+
+        $comments = Comment::query()
+            ->with([
+                'user:id,name,phone,email',
+                'admin:id,name',
+                'model',
+            ])
+            ->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')))
+            ->when($request->filled('search'), function ($query) use ($request): void {
+                $term = trim((string) $request->string('search'));
+                $query->where(function ($query) use ($term): void {
+                    $query->where('comment', 'like', "%{$term}%")
+                        ->orWhere('answer', 'like', "%{$term}%")
+                        ->orWhereHas('user', fn ($user) => $user
+                            ->where('name', 'like', "%{$term}%")
+                            ->orWhere('phone', 'like', "%{$term}%"));
+                });
+            })
+            ->latest()
+            ->paginate($perPage);
+
+        return response()->json($comments);
+    }
+
+    public function show(Comment $comment): JsonResponse
+    {
+        return response()->json($comment->load(['user', 'admin', 'model']));
     }
 
     #[OA\Post(
@@ -36,6 +70,13 @@ class CommentController extends Controller
         $comment->update(['status' => 'published']);
 
         return response()->json($comment->fresh());
+    }
+
+    public function reject(Comment $comment): JsonResponse
+    {
+        $comment->update(['status' => 'rejected']);
+
+        return response()->json($comment->fresh()->load(['user', 'admin', 'model']));
     }
 
     #[OA\Post(

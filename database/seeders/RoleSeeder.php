@@ -16,9 +16,9 @@ class RoleSeeder extends Seeder
         $role = Role::withTrashed()->firstOrNew(['slug' => 'super-admin']);
 
         $role->fill([
-            'name' => 'Super Admin',
+            'name' => 'مدیر کل',
             'guard_name' => 'web',
-            'description' => 'System owner role with full permissions.',
+            'description' => 'مالک سامانه با دسترسی کامل به همه بخش‌های مدیریتی.',
         ]);
 
         if ($role->trashed()) {

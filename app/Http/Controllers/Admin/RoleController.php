@@ -40,6 +40,12 @@ class RoleController extends Controller
 
         $roles = Role::query()
             ->with('permissions')
+            ->when($request->filled('search'), function ($query) use ($request): void {
+                $term = trim((string) $request->string('search'));
+                $query->where(fn ($query) => $query
+                    ->where('name', 'like', "%{$term}%")
+                    ->orWhere('slug', 'like', "%{$term}%"));
+            })
             ->latest()
             ->paginate($perPage);
 
@@ -156,7 +162,7 @@ class RoleController extends Controller
     public function syncPermissions(Request $request, Role $role): JsonResponse
     {
         $data = $request->validate([
-            'permissions' => ['required', 'array', 'min:1'],
+            'permissions' => ['required', 'array'],
             'permissions.*' => ['integer', Rule::exists('permissions', 'id')],
         ]);
 

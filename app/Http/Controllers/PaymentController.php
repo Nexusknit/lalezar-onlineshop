@@ -13,6 +13,7 @@ use App\Support\Coupons\CouponService;
 use App\Support\Invoices\InvoiceAllocationService;
 use App\Support\Invoices\InvoiceStatusService;
 use App\Support\Payments\PaymentGatewayService;
+use App\Support\Settings\StoreSettingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -232,6 +233,12 @@ class PaymentController extends Controller
 
     public function initiate(Request $request): JsonResponse
     {
+        abort_if(
+            ! StoreSettingService::boolean('payment', 'online_payment_enabled', true),
+            422,
+            'Online payment is currently disabled.'
+        );
+
         $data = $request->validate([
             'invoice_id' => ['required', 'integer', Rule::exists('invoices', 'id')],
             'method' => ['nullable', 'string', 'max:50'],

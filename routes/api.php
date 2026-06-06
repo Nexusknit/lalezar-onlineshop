@@ -4,6 +4,8 @@ use App\Http\Controllers\Admin\BlogController;
 use App\Http\Controllers\Admin\BrandController as AdminBrandController;
 use App\Http\Controllers\Admin\CategoryController;
 use App\Http\Controllers\Admin\CommentController;
+use App\Http\Controllers\Admin\CouponController as AdminCouponController;
+use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\InvoiceController;
 use App\Http\Controllers\Admin\NewsController;
 use App\Http\Controllers\Admin\PermissionController;
@@ -11,6 +13,7 @@ use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\RelationController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\StateController;
+use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\CityController as AdminCityController;
 use App\Http\Controllers\Admin\TicketController;
 use App\Http\Controllers\Admin\UserController;
@@ -110,6 +113,8 @@ Route::prefix('admin')
     ->middleware(['auth:sanctum', 'throttle:admin-api', 'audit.admin'])
     ->as('admin.')
     ->group(function (): void {
+        Route::get('/dashboard', [DashboardController::class, 'show'])->name('dashboard.show');
+
         // Users
         Route::get('/users', [UserController::class, 'all'])->name('users.index');
         Route::post('/users', [UserController::class, 'store'])->name('users.store');
@@ -161,7 +166,10 @@ Route::prefix('admin')
         Route::match(['put', 'patch'], '/permissions/{permission}', [PermissionController::class, 'update'])->name('permissions.update');
 
         // Tickets
+        Route::get('/tickets', [TicketController::class, 'index'])->name('tickets.index');
         Route::post('/tickets', [TicketController::class, 'store'])->name('tickets.store');
+        Route::get('/tickets/{ticket}', [TicketController::class, 'show'])->name('tickets.show');
+        Route::patch('/tickets/{ticket}', [TicketController::class, 'update'])->name('tickets.update');
         Route::post('/tickets/{ticket}/messages', [TicketController::class, 'sendMessage'])->name('tickets.messages.store');
 
         // Categories
@@ -182,9 +190,19 @@ Route::prefix('admin')
         Route::match(['put', 'patch'], '/cities/{city}', [AdminCityController::class, 'update'])->name('cities.update');
 
         // Comments
+        Route::get('/comments', [CommentController::class, 'index'])->name('comments.index');
+        Route::get('/comments/{comment}', [CommentController::class, 'show'])->name('comments.show');
         Route::post('/comments/{comment}/release', [CommentController::class, 'release'])->name('comments.release');
+        Route::post('/comments/{comment}/reject', [CommentController::class, 'reject'])->name('comments.reject');
         Route::post('/comments/{comment}/answer', [CommentController::class, 'answer'])->name('comments.answer');
         Route::post('/comments/{comment}/specialize', [CommentController::class, 'specialize'])->name('comments.specialize');
+
+        // Coupons
+        Route::get('/coupons', [AdminCouponController::class, 'index'])->name('coupons.index');
+        Route::post('/coupons', [AdminCouponController::class, 'store'])->name('coupons.store');
+        Route::get('/coupons/{coupon}', [AdminCouponController::class, 'show'])->name('coupons.show');
+        Route::match(['put', 'patch'], '/coupons/{coupon}', [AdminCouponController::class, 'update'])->name('coupons.update');
+        Route::delete('/coupons/{coupon}', [AdminCouponController::class, 'destroy'])->name('coupons.destroy');
 
         // Invoices
         Route::get('/invoices', [InvoiceController::class, 'all'])->name('invoices.index');
@@ -199,4 +217,8 @@ Route::prefix('admin')
         Route::post('/relations/attributes', [RelationController::class, 'attachAttribute'])->name('relations.attributes');
         Route::post('/relations/likes', [RelationController::class, 'attachLike'])->name('relations.likes');
         Route::post('/relations/galleries', [RelationController::class, 'attachGallery'])->name('relations.galleries');
+
+        // Settings
+        Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');
+        Route::put('/settings', [SettingController::class, 'update'])->name('settings.update');
     });

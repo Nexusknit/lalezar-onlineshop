@@ -14,8 +14,45 @@ class TicketController extends Controller
 {
     public function __construct()
     {
+        $this->middleware('permission:ticket.all')->only(['index', 'show']);
         $this->middleware('permission:ticket.store')->only('store');
+        $this->middleware('permission:ticket.update')->only('update');
         $this->middleware('permission:ticket.sendMessage')->only('sendMessage');
+    }
+
+    public function index(Request $request): JsonResponse
+    {
+        $perPage = max(1, min((int) $request->integer('per_page', 15), 100));
+
+        $tickets = Ticket::query()
+            ->with(['user:id,name,phone,email'])
+            ->withCount('chats')
+            ->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')))
+            ->when($request->filled('priority'), fn ($query) => $query->where('priority', $request->string('priority')))
+            ->when($request->filled('search'), function ($query) use ($request): void {
+                $term = trim((string) $request->string('search'));
+                $query->where(function ($query) use ($term): void {
+                    $query->where('subject', 'like', "%{$term}%")
+                        ->orWhere('description', 'like', "%{$term}%")
+                        ->orWhereHas('user', fn ($user) => $user
+                            ->where('name', 'like', "%{$term}%")
+                            ->orWhere('phone', 'like', "%{$term}%"));
+                });
+            })
+            ->latest()
+            ->paginate($perPage);
+
+        return response()->json($tickets);
+    }
+
+    public function show(Ticket $ticket): JsonResponse
+    {
+        return response()->json(
+            $ticket->load([
+                'user:id,name,phone,email',
+                'chats' => fn ($query) => $query->with('user:id,name')->oldest(),
+            ])
+        );
     }
 
     #[OA\Post(
@@ -64,6 +101,25 @@ class TicketController extends Controller
         return response()->json($ticket->fresh()->load('user'), 201);
     }
 
+    public function update(Request $request, Ticket $ticket): JsonResponse
+    {
+        $data = $request->validate([
+            'status' => ['sometimes', Rule::in(['open', 'pending', 'answered', 'resolved', 'closed'])],
+            'priority' => ['sometimes', Rule::in(['low', 'normal', 'high', 'urgent'])],
+            'type' => ['sometimes', 'string', 'max:100'],
+        ]);
+
+        if (($data['status'] ?? null) === 'resolved') {
+            $data['resolved_at'] = now();
+        } elseif (isset($data['status']) && $data['status'] !== 'resolved') {
+            $data['resolved_at'] = null;
+        }
+
+        $ticket->update($data);
+
+        return response()->json($ticket->fresh()->load(['user', 'chats.user']));
+    }
+
     #[OA\Post(
         path: '/api/admin/tickets/{ticket}/messages',
         operationId: 'adminTicketsSendMessage',
@@ -105,6 +161,13 @@ class TicketController extends Controller
             'message' => $data['message'],
             'is_internal' => (bool) ($data['is_internal'] ?? false),
         ]);
+
+        if (! (bool) ($data['is_internal'] ?? false)) {
+            $ticket->update([
+                'status' => 'answered',
+                'resolved_at' => null,
+            ]);
+        }
 
         return response()->json($chat->fresh()->load('user'), 201);
     }

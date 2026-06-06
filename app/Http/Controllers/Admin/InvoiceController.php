@@ -46,9 +46,20 @@ class InvoiceController extends Controller
         $perPage = $perPage > 0 ? min($perPage, 100) : 15;
 
         $invoices = Invoice::query()
-            ->with(['user', 'payments'])
+            ->with(['user', 'payments', 'address'])
             ->when($request->filled('status'), static function ($query) use ($request) {
                 $query->where('status', $request->string('status'));
+            })
+            ->when($request->filled('search'), static function ($query) use ($request): void {
+                $term = trim((string) $request->string('search'));
+                $query->where(static function ($query) use ($term): void {
+                    $query->where('number', 'like', "%{$term}%")
+                        ->orWhereHas('user', static fn ($user) => $user
+                            ->where('name', 'like', "%{$term}%")
+                            ->orWhere('phone', 'like', "%{$term}%"))
+                        ->orWhereHas('payments', static fn ($payment) => $payment
+                            ->where('reference', 'like', "%{$term}%"));
+                });
             })
             ->latest()
             ->paginate($perPage);
@@ -92,7 +103,7 @@ class InvoiceController extends Controller
     public function detail(Invoice $invoice): JsonResponse
     {
         return response()->json(
-            $invoice->load(['user', 'items', 'payments', 'tags', 'categories'])
+            $invoice->load(['user', 'address', 'coupon', 'items.product', 'payments', 'tags', 'categories'])
         );
     }
 
@@ -175,7 +186,7 @@ class InvoiceController extends Controller
             }
 
             $meta = (array) ($lockedInvoice->meta ?? []);
-            $meta['admin_status_update'] = [
+            $statusUpdate = [
                 'from' => $fromStatus,
                 'to' => $toStatus,
                 'updated_by' => (int) $request->user()->id,
@@ -183,8 +194,13 @@ class InvoiceController extends Controller
             ];
 
             if (isset($data['note']) && $data['note'] !== '') {
-                $meta['admin_status_update']['note'] = $data['note'];
+                $statusUpdate['note'] = $data['note'];
             }
+            $meta['admin_status_update'] = $statusUpdate;
+            $meta['status_history'] = array_values([
+                ...((array) ($meta['status_history'] ?? [])),
+                $statusUpdate,
+            ]);
 
             $lockedInvoice->update([
                 'status' => $toStatus,
@@ -198,7 +214,7 @@ class InvoiceController extends Controller
                 );
             }
 
-            return $lockedInvoice->fresh()->load(['user', 'items', 'payments', 'tags', 'categories']);
+            return $lockedInvoice->fresh()->load(['user', 'address', 'coupon', 'items.product', 'payments', 'tags', 'categories']);
         });
 
         return response()->json($updatedInvoice);
