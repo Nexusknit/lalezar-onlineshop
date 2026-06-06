@@ -8,6 +8,8 @@ use App\Models\Invoice;
 use App\Models\Item;
 use App\Models\Payment;
 use App\Models\Product;
+use App\Models\Shipment;
+use App\Support\Cart\CartService;
 use App\Support\Accounting\AccountingOutboxService;
 use App\Support\Checkout\CheckoutPricingService;
 use App\Support\Coupons\CouponService;
@@ -15,6 +17,7 @@ use App\Support\Invoices\InvoiceAllocationService;
 use App\Support\Invoices\InvoiceStatusService;
 use App\Support\Payments\PaymentGatewayService;
 use App\Support\Settings\StoreSettingService;
+use App\Support\Shipping\ShippingQuoteService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -29,7 +32,9 @@ class PaymentController extends Controller
     public function __construct(
         protected InvoiceAllocationService $invoiceAllocationService,
         protected PaymentGatewayService $paymentGatewayService,
-        protected AccountingOutboxService $accountingOutboxService
+        protected AccountingOutboxService $accountingOutboxService,
+        protected CartService $cartService,
+        protected ShippingQuoteService $shippingQuoteService
     ) {
         $this->middleware('auth:sanctum')->except('callback');
     }
@@ -42,10 +47,11 @@ class PaymentController extends Controller
         requestBody: new OA\RequestBody(
             required: true,
             content: new OA\JsonContent(
-                required: ['address_id', 'items'],
+                required: ['address_id'],
                 properties: [
                     new OA\Property(property: 'address_id', type: 'integer', example: 3),
                     new OA\Property(property: 'coupon_code', type: 'string', nullable: true, example: 'WELCOME10'),
+                    new OA\Property(property: 'shipping_method_id', type: 'integer', nullable: true, example: 1),
                     new OA\Property(
                         property: 'items',
                         type: 'array',
@@ -79,7 +85,8 @@ class PaymentController extends Controller
             'coupon_code' => ['nullable', 'string', 'max:64'],
             'shipping' => ['prohibited'],
             'tax' => ['prohibited'],
-            'items' => ['required', 'array', 'min:1'],
+            'shipping_method_id' => ['nullable', 'integer', 'exists:shipping_methods,id'],
+            'items' => ['nullable', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'integer', 'distinct'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
         ]);
@@ -91,12 +98,18 @@ class PaymentController extends Controller
 
         abort_if(! $address, 422, 'Selected address not found.');
 
-        $productIds = collect($data['items'])->pluck('product_id')->all();
+        $cart = $this->cartService->resolve($request);
+        $checkoutItems = collect($data['items'] ?? []);
+        if ($checkoutItems->isEmpty()) {
+            $checkoutItems = $this->cartService->checkoutItems($cart);
+            abort_if($checkoutItems->isEmpty(), 422, 'Cart is empty.');
+        }
+        $productIds = $checkoutItems->pluck('product_id')->all();
 
         $couponCode = isset($data['coupon_code']) ? trim((string) $data['coupon_code']) : null;
 
         /** @var Invoice $invoice */
-        $invoice = DB::transaction(function () use ($user, $address, $productIds, $data, $couponCode) {
+        $invoice = DB::transaction(function () use ($user, $address, $productIds, $checkoutItems, $data, $couponCode, $cart) {
             $products = Product::query()
                 ->whereIn('id', $productIds)
                 ->whereIn('status', ['active', 'special'])
@@ -106,7 +119,7 @@ class PaymentController extends Controller
 
             abort_if($products->count() !== count($productIds), 422, 'One or more products are unavailable.');
 
-            $itemsPayload = collect($data['items'])->map(function (array $item) use ($products) {
+            $itemsPayload = $checkoutItems->map(function (array $item) use ($products) {
                 /** @var Product|null $product */
                 $product = $products->get($item['product_id']);
 
@@ -147,7 +160,12 @@ class PaymentController extends Controller
             }
 
             $total = round(max(0, (float) $subtotal - $discount), 2);
-            $pricing = CheckoutPricingService::calculate($total);
+            $shippingOption = $this->shippingQuoteService->selected(
+                $total,
+                $address->loadMissing('city.state'),
+                isset($data['shipping_method_id']) ? (int) $data['shipping_method_id'] : null
+            );
+            $pricing = CheckoutPricingService::calculate($total, (float) $shippingOption['cost']);
             $shipping = $pricing['shipping'];
             $tax = $pricing['tax'];
             $grandTotal = $pricing['total'];
@@ -163,6 +181,7 @@ class PaymentController extends Controller
             ] : [];
 
             $meta['shipping'] = $shipping;
+            $meta['shipping_method'] = $shippingOption;
             $meta['tax'] = $tax;
             $meta['allocation'] = [
                 'reserved_at' => now()->toAtomString(),
@@ -173,12 +192,14 @@ class PaymentController extends Controller
                 'user_id' => $user->id,
                 'address_id' => $address->id,
                 'coupon_id' => $coupon?->id,
+                'shipping_method_id' => $shippingOption['id'],
                 'number' => $this->generateInvoiceNumber(),
                 'status' => InvoiceStatusService::PENDING,
                 'currency' => $currency,
                 'subtotal' => $subtotal,
                 'tax' => $tax,
                 'discount' => $discount,
+                'shipping' => $shipping,
                 'total' => $grandTotal,
                 'issued_at' => now(),
                 'meta' => $meta,
@@ -223,10 +244,20 @@ class PaymentController extends Controller
                 ]);
             }
 
+            Shipment::query()->create([
+                'invoice_id' => $invoice->id,
+                'shipping_method_id' => $shippingOption['id'],
+                'status' => 'preparing',
+            ]);
+
+            $cart->items()->delete();
+
             return $invoice->fresh()->load([
                 'items',
                 'address.city.state',
                 'coupon',
+                'shippingMethod',
+                'shipment.shippingMethod',
             ]);
         });
 
@@ -658,6 +689,8 @@ class PaymentController extends Controller
             'payments',
             'address.city.state',
             'coupon',
+            'shippingMethod',
+            'shipment.shippingMethod',
         ]);
     }
 

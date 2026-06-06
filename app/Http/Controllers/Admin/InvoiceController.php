@@ -112,6 +112,8 @@ class InvoiceController extends Controller
                 'tags',
                 'categories',
                 'accountingMapping',
+                'shippingMethod',
+                'shipment.shippingMethod',
                 'accountingSyncLogs' => static fn ($query) => $query->latest()->limit(10),
             ])
         );
@@ -233,6 +235,8 @@ class InvoiceController extends Controller
                 'tags',
                 'categories',
                 'accountingMapping',
+                'shippingMethod',
+                'shipment.shippingMethod',
                 'accountingSyncLogs' => static fn ($query) => $query->latest()->limit(10),
             ]);
         });

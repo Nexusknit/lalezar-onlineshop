@@ -34,13 +34,20 @@ This repository is the Laravel backend API for the electrical supplies online sh
 - Auth uses OTP challenge storage through cache and token issuance through Sanctum.
 - Public catalog payload shaping lives in `app/Support/Loaders/*`.
 - Checkout and payment rules are split across:
+  - `app/Support/Cart/CartService.php`
   - `app/Support/Checkout/CheckoutPricingService.php`
+  - `app/Support/Shipping/ShippingQuoteService.php`
   - `app/Support/Coupons/CouponService.php`
   - `app/Support/Invoices/InvoiceAllocationService.php`
   - `app/Support/Invoices/InvoiceStatusService.php`
   - `app/Support/Payments/PaymentGatewayService.php`
 - Payment configuration must stay environment-driven. `APP_URL` is the default gateway callback base, `FRONTEND_URL` is the default payment result URL base, and gateway-specific callback envs should only override those when the domains differ.
 - Invoice status transitions must go through `InvoiceStatusService::canTransition(...)`.
+- `Invoice` is the order aggregate for this project. Do not introduce a parallel `Order` model without a migration plan for payments, items, coupons, accounting mappings, and shipment ownership.
+- Authenticated carts are identified by `user_id`; guest carts use the `X-Cart-Token` header. Login must merge the guest cart into the user cart.
+- Checkout must prefer persisted server cart items. Legacy item payloads are only retained for API compatibility and tests.
+- Shipping methods may restrict service by state/city and order amount. Final shipping cost must always be recalculated on the backend.
+- The current shipment model is one shipment per invoice. Multi-package fulfillment is a later capability and must not be simulated in invoice metadata.
 - Stock and coupon allocation changes must stay transactional and lock relevant rows.
 - Runtime merchant settings are stored through `app/Support/Settings/StoreSettingService.php`; code must retain config/env fallbacks when a setting has not been saved.
 - Admin dashboard, coupon, moderation, support, access-control, invoice, and settings endpoints must remain permission-aware and covered by feature tests.
@@ -63,6 +70,7 @@ This repository is the Laravel backend API for the electrical supplies online sh
 
 - Payment initiation and callback verification.
 - Inventory reservation/release on payment failure and retry.
+- Cart merge quantities, shipping eligibility, and shipment/invoice status synchronization.
 - Coupon usage limits and release/re-reserve behavior.
 - Admin impersonation tokens.
 - File upload disk selection and public media URLs.

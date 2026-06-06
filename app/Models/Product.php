@@ -54,6 +54,11 @@ class Product extends Model implements Searchable
         return $this->hasMany(Item::class);
     }
 
+    public function cartItems(): HasMany
+    {
+        return $this->hasMany(CartItem::class);
+    }
+
     public function accountingMapping(): HasOne
     {
         return $this->hasOne(AccountingProductMapping::class);

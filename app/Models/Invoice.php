@@ -20,12 +20,14 @@ class Invoice extends Model
         'user_id',
         'address_id',
         'coupon_id',
+        'shipping_method_id',
         'number',
         'status',
         'currency',
         'subtotal',
         'tax',
         'discount',
+        'shipping',
         'total',
         'issued_at',
         'due_at',
@@ -36,6 +38,7 @@ class Invoice extends Model
         'subtotal' => 'decimal:2',
         'tax' => 'decimal:2',
         'discount' => 'decimal:2',
+        'shipping' => 'decimal:2',
         'total' => 'decimal:2',
         'issued_at' => 'datetime',
         'due_at' => 'datetime',
@@ -56,6 +59,16 @@ class Invoice extends Model
     public function coupon(): BelongsTo
     {
         return $this->belongsTo(Coupon::class);
+    }
+
+    public function shippingMethod(): BelongsTo
+    {
+        return $this->belongsTo(ShippingMethod::class);
+    }
+
+    public function shipment(): HasOne
+    {
+        return $this->hasOne(Shipment::class);
     }
 
     public function items(): HasMany

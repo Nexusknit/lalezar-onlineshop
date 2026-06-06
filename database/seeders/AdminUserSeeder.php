@@ -21,25 +21,33 @@ class AdminUserSeeder extends Seeder
         }
 
         $email = (string) config('security.admin_seed.email', 'admin@lalezar.local');
+        $phone = (string) config('security.admin_seed.phone', '09120000000');
         $password = config('security.admin_seed.password');
 
-        if (! is_string($password) || trim($password) === '') {
+        $user = User::query()
+            ->where('email', $email)
+            ->orWhere('phone', $phone)
+            ->firstOrNew();
+
+        if ((! is_string($password) || trim($password) === '') && ! $user->exists) {
             $password = Str::password(32);
 
             $this->command?->warn('ADMIN_SEED_PASSWORD is not set; generated a random password for the seeded admin.');
         }
 
-        $this->ensureSafePassword($password);
+        $attributes = [
+            'email' => $email,
+            'name' => (string) config('security.admin_seed.name', 'Administrator'),
+            'phone' => $phone,
+            'accessibility' => true,
+        ];
 
-        $user = User::query()->updateOrCreate(
-            ['email' => $email],
-            [
-                'name' => (string) config('security.admin_seed.name', 'Administrator'),
-                'password' => Hash::make($password),
-                'phone' => (string) config('security.admin_seed.phone', '09120000000'),
-                'accessibility' => true,
-            ],
-        );
+        if (is_string($password) && trim($password) !== '') {
+            $this->ensureSafePassword($password);
+            $attributes['password'] = Hash::make($password);
+        }
+
+        $user->fill($attributes)->save();
 
         $role = Role::query()->where('slug', 'super-admin')->first();
 

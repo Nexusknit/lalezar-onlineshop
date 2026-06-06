@@ -15,6 +15,8 @@ use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\RelationController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SettingController;
+use App\Http\Controllers\Admin\ShipmentController;
+use App\Http\Controllers\Admin\ShippingMethodController;
 use App\Http\Controllers\Admin\StateController;
 use App\Http\Controllers\Admin\TicketController;
 use App\Http\Controllers\Admin\UserController;
@@ -49,8 +51,17 @@ Route::post('/auth/logout', [AuthController::class, 'logout'])
     ->middleware(['auth:sanctum', 'throttle:user-api'])
     ->name('auth.logout');
 
+Route::get('/cart', [CartController::class, 'show'])->name('cart.show');
+Route::post('/cart/items', [CartController::class, 'storeItem'])->name('cart.items.store');
+Route::patch('/cart/items/{product}', [CartController::class, 'updateItem'])->name('cart.items.update');
+Route::delete('/cart/items/{product}', [CartController::class, 'destroyItem'])->name('cart.items.destroy');
+Route::delete('/cart', [CartController::class, 'clear'])->name('cart.clear');
 Route::post('/cart/check', [CartController::class, 'check'])->name('cart.check');
+Route::post('/cart/shipping-options', [CartController::class, 'shippingOptions'])->name('cart.shipping-options');
 Route::post('/cart/coupon', [CouponController::class, 'preview'])->name('cart.coupon');
+Route::post('/cart/merge', [CartController::class, 'merge'])
+    ->middleware(['auth:sanctum', 'throttle:user-api'])
+    ->name('cart.merge');
 Route::match(['get', 'post'], '/payments/callback', [PaymentController::class, 'callback'])
     ->withoutMiddleware([ForceJsonResponse::class])
     ->name('payments.callback');
@@ -211,6 +222,12 @@ Route::prefix('admin')
         Route::get('/invoices/{invoice}/items', [InvoiceController::class, 'items'])->name('invoices.items');
         Route::patch('/invoices/{invoice}/status', [InvoiceController::class, 'updateStatus'])->name('invoices.status.update');
         Route::get('/users/{user}/invoices', [InvoiceController::class, 'user'])->name('users.invoices');
+
+        // Shipping
+        Route::get('/shipping-methods', [ShippingMethodController::class, 'index'])->name('shipping-methods.index');
+        Route::post('/shipping-methods', [ShippingMethodController::class, 'store'])->name('shipping-methods.store');
+        Route::match(['put', 'patch'], '/shipping-methods/{shippingMethod}', [ShippingMethodController::class, 'update'])->name('shipping-methods.update');
+        Route::patch('/shipments/{shipment}', [ShipmentController::class, 'update'])->name('shipments.update');
 
         // Relations
         Route::post('/relations/categories', [RelationController::class, 'attachCategory'])->name('relations.categories');

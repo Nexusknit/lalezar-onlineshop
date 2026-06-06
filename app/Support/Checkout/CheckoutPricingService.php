@@ -9,10 +9,12 @@ class CheckoutPricingService
     /**
      * @return array{shipping:float,tax:float,total:float}
      */
-    public static function calculate(float $subtotalAfterDiscount): array
+    public static function calculate(float $subtotalAfterDiscount, ?float $shippingOverride = null): array
     {
         $subtotal = self::normalizeMoney($subtotalAfterDiscount);
-        $shipping = self::resolveShipping($subtotal);
+        $shipping = $shippingOverride === null
+            ? self::resolveShipping($subtotal)
+            : self::normalizeMoney($shippingOverride);
         $tax = self::resolveTax($subtotal, $shipping);
 
         return [

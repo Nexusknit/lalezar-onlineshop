@@ -109,6 +109,12 @@ class PermissionSeeder extends Seeder
             'invoice.user',
             'invoice.updateStatus',
 
+            // Shipping
+            'shipping.all',
+            'shipping.store',
+            'shipping.update',
+            'shipment.update',
+
             // Relations
             'relation.attachCategory',
             'relation.attachTag',
@@ -159,6 +165,8 @@ class PermissionSeeder extends Seeder
             'comment' => 'نظر',
             'coupon' => 'کوپن',
             'invoice' => 'فاکتور',
+            'shipping' => 'روش ارسال',
+            'shipment' => 'مرسوله',
             'relation' => 'ارتباط',
             'setting' => 'تنظیمات',
             'accounting' => 'حسابداری',

@@ -16,7 +16,7 @@ class InvoiceController extends Controller
 
         $invoices = $request->user()
             ->invoices()
-            ->with(['items', 'address.city.state', 'payments', 'coupon'])
+            ->with(['items', 'address.city.state', 'payments', 'coupon', 'shippingMethod', 'shipment.shippingMethod'])
             ->when($request->filled('status'), static function ($query) use ($request): void {
                 $query->where('status', $request->string('status'));
             })
@@ -31,7 +31,7 @@ class InvoiceController extends Controller
         abort_if($invoice->user_id !== $request->user()->id, 404, 'Invoice not found.');
 
         return response()->json(
-            $invoice->load(['items', 'address.city.state', 'payments', 'coupon'])
+            $invoice->load(['items', 'address.city.state', 'payments', 'coupon', 'shippingMethod', 'shipment.shippingMethod'])
         );
     }
 }
