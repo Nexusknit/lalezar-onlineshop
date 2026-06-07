@@ -21,11 +21,15 @@ class Gallery extends Model
         'path',
         'title',
         'alt',
+        'sort_order',
+        'is_primary',
         'meta',
     ];
 
     protected $casts = [
         'meta' => 'array',
+        'sort_order' => 'integer',
+        'is_primary' => 'boolean',
     ];
 
     public function creator(): BelongsTo

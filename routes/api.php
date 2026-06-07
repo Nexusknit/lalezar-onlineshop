@@ -12,12 +12,14 @@ use App\Http\Controllers\Admin\InvoiceController;
 use App\Http\Controllers\Admin\NewsController;
 use App\Http\Controllers\Admin\PermissionController;
 use App\Http\Controllers\Admin\ProductController;
+use App\Http\Controllers\Admin\ProductVariantController;
 use App\Http\Controllers\Admin\RelationController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\ShipmentController;
 use App\Http\Controllers\Admin\ShippingMethodController;
 use App\Http\Controllers\Admin\StateController;
+use App\Http\Controllers\Admin\TagController as AdminTagController;
 use App\Http\Controllers\Admin\TicketController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\AuthController;
@@ -166,6 +168,11 @@ Route::prefix('admin')
         Route::match(['put', 'patch'], '/products/{product}', [ProductController::class, 'update'])->name('products.update');
         Route::post('/products/{product}/activate', [ProductController::class, 'activate'])->name('products.activate');
         Route::post('/products/{product}/specialize', [ProductController::class, 'specialize'])->name('products.specialize');
+        Route::post('/products/{product}/variants', [ProductVariantController::class, 'store'])->name('products.variants.store');
+        Route::patch('/products/{product}/variants/{variant}', [ProductVariantController::class, 'update'])->name('products.variants.update');
+        Route::delete('/products/{product}/variants/{variant}', [ProductVariantController::class, 'destroy'])->name('products.variants.delete');
+        Route::get('/tags', [AdminTagController::class, 'index'])->name('tags.index');
+        Route::post('/tags', [AdminTagController::class, 'store'])->name('tags.store');
 
         // Roles & Permissions
         Route::get('/roles', [RoleController::class, 'all'])->name('roles.index');
@@ -235,6 +242,14 @@ Route::prefix('admin')
         Route::post('/relations/attributes', [RelationController::class, 'attachAttribute'])->name('relations.attributes');
         Route::post('/relations/likes', [RelationController::class, 'attachLike'])->name('relations.likes');
         Route::post('/relations/galleries', [RelationController::class, 'attachGallery'])->name('relations.galleries');
+        Route::post('/relations/brands', [RelationController::class, 'attachBrand'])->name('relations.brands');
+        Route::delete('/relations/categories', [RelationController::class, 'detachCategory'])->name('relations.categories.detach');
+        Route::delete('/relations/tags', [RelationController::class, 'detachTag'])->name('relations.tags.detach');
+        Route::delete('/relations/brands', [RelationController::class, 'detachBrand'])->name('relations.brands.detach');
+        Route::patch('/relations/attributes/{attribute}', [RelationController::class, 'updateAttribute'])->name('relations.attributes.update');
+        Route::delete('/relations/attributes/{attribute}', [RelationController::class, 'deleteAttribute'])->name('relations.attributes.delete');
+        Route::patch('/relations/galleries/{gallery}', [RelationController::class, 'updateGallery'])->name('relations.galleries.update');
+        Route::delete('/relations/galleries/{gallery}', [RelationController::class, 'deleteGallery'])->name('relations.galleries.delete');
 
         // Settings
         Route::get('/settings', [SettingController::class, 'index'])->name('settings.index');

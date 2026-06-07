@@ -45,7 +45,8 @@ class BrandController extends Controller
                 'categories.parent:id,name,slug',
                 'tags:id,name,slug',
                 'attributes:id,creator_id,model_id,model_type,key,value,amount',
-                'galleries:id,creator_id,model_id,model_type,disk,path,title,alt,created_at',
+                'galleries:id,creator_id,model_id,model_type,disk,path,title,alt,sort_order,is_primary,created_at',
+                'variants',
                 'comments' => static function ($query): void {
                     $query->whereIn('status', ['published', 'answered'])
                         ->with(['user:id,name'])

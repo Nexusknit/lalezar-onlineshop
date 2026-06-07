@@ -46,7 +46,8 @@ class ProductController extends Controller
                 'categories.parent:id,name,slug',
                 'tags:id,name,slug',
                 'attributes:id,creator_id,model_id,model_type,key,value,amount',
-                'galleries:id,creator_id,model_id,model_type,disk,path,title,alt,created_at',
+                'galleries:id,creator_id,model_id,model_type,disk,path,title,alt,sort_order,is_primary,created_at',
+                'variants',
                 'comments' => static function ($query): void {
                     $query->whereIn('status', ['published', 'answered'])
                         ->with(['user:id,name'])
@@ -124,12 +125,12 @@ class ProductController extends Controller
         }
 
         if ($rating !== null) {
-            $ratingSql = "(select avg(comments.rating) from comments
+            $ratingSql = '(select avg(comments.rating) from comments
                 where comments.model_id = products.id
                 and comments.model_type = ?
                 and comments.status in (?, ?)
                 and comments.deleted_at is null
-                and comments.rating is not null)";
+                and comments.rating is not null)';
 
             $query
                 ->whereRaw("{$ratingSql} >= ?", [Product::class, 'published', 'answered', $rating])
@@ -157,7 +158,8 @@ class ProductController extends Controller
             'categories.parent:id,name,slug',
             'tags:id,name,slug',
             'attributes:id,creator_id,model_id,model_type,key,value,amount',
-            'galleries:id,creator_id,model_id,model_type,disk,path,title,alt,created_at',
+            'galleries:id,creator_id,model_id,model_type,disk,path,title,alt,sort_order,is_primary,created_at',
+            'variants',
             'comments' => static function ($query): void {
                 $query->whereIn('status', ['published', 'answered'])
                     ->with(['user:id,name'])
@@ -221,31 +223,37 @@ class ProductController extends Controller
     {
         if (in_array($sort, ['low', 'price_asc'], true)) {
             $query->orderBy('price');
+
             return;
         }
 
         if (in_array($sort, ['high', 'price_desc'], true)) {
             $query->orderByDesc('price');
+
             return;
         }
 
         if (in_array($sort, ['sale', 'discount'], true)) {
             $query->orderByDesc('discount_percent')->latest();
+
             return;
         }
 
         if (in_array($sort, ['top_selling', 'sold'], true)) {
             $query->orderByDesc('sold_count')->latest();
+
             return;
         }
 
         if (in_array($sort, ['old', 'oldest'], true)) {
             $query->oldest();
+
             return;
         }
 
         if (in_array($sort, ['rating', 'rating_desc'], true)) {
             $query->orderByDesc('published_rating_avg')->latest();
+
             return;
         }
 

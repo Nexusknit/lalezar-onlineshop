@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\InventoryMovement;
+use App\Models\PriceHistory;
 use App\Models\Product;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -44,7 +46,7 @@ class ProductController extends Controller
         $perPage = $perPage > 0 ? min($perPage, 100) : 15;
 
         $products = Product::query()
-            ->with(['creator', 'categories', 'tags', 'galleries', 'attributes', 'brands'])
+            ->with(['creator', 'categories', 'tags', 'galleries', 'attributes', 'brands', 'variants'])
             ->when($request->filled('status'), static function ($query) use ($request) {
                 $query->where('status', $request->string('status'));
             })
@@ -64,7 +66,17 @@ class ProductController extends Controller
 
     public function show(Product $product): JsonResponse
     {
-        $product->load(['creator', 'categories', 'tags', 'galleries', 'attributes', 'brands']);
+        $product->load([
+            'creator',
+            'categories',
+            'tags',
+            'galleries',
+            'attributes',
+            'brands',
+            'variants',
+            'inventoryMovements' => static fn ($query) => $query->latest()->limit(50),
+            'priceHistories' => static fn ($query) => $query->latest()->limit(50),
+        ]);
 
         return response()->json($product);
     }
@@ -105,10 +117,18 @@ class ProductController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'slug' => ['nullable', 'string', 'max:255', 'unique:products,slug'],
             'sku' => ['nullable', 'string', 'max:100', 'unique:products,sku'],
+            'barcode' => ['nullable', 'string', 'max:100', 'unique:products,barcode'],
             'description' => ['nullable', 'string'],
             'stock' => ['nullable', 'integer', 'min:0'],
             'price' => ['required', 'numeric', 'min:0'],
             'currency' => ['nullable', 'string', 'size:3'],
+            'weight_grams' => ['nullable', 'integer', 'min:0'],
+            'length_mm' => ['nullable', 'integer', 'min:0'],
+            'width_mm' => ['nullable', 'integer', 'min:0'],
+            'height_mm' => ['nullable', 'integer', 'min:0'],
+            'warranty' => ['nullable', 'string', 'max:255'],
+            'min_order_quantity' => ['nullable', 'integer', 'min:1'],
+            'max_order_quantity' => ['nullable', 'integer', 'min:1', 'gte:min_order_quantity'],
             'status' => ['nullable', 'string', 'max:50'],
             'meta' => ['nullable', 'array'],
             'creator_id' => ['nullable', 'integer', Rule::exists('users', 'id')],
@@ -118,6 +138,25 @@ class ProductController extends Controller
         $data['creator_id'] = $data['creator_id'] ?? $request->user()?->id;
 
         $product = Product::query()->create($data);
+        PriceHistory::query()->create([
+            'product_id' => $product->id,
+            'actor_id' => $request->user()?->id,
+            'new_price' => $product->price,
+            'currency' => $product->currency,
+            'reason' => 'product_created',
+        ]);
+        if ((int) $product->stock > 0) {
+            InventoryMovement::query()->create([
+                'product_id' => $product->id,
+                'actor_id' => $request->user()?->id,
+                'type' => 'adjustment',
+                'stock_delta' => (int) $product->stock,
+                'reserved_delta' => 0,
+                'stock_after' => (int) $product->stock,
+                'reserved_after' => 0,
+                'reason' => 'product_created',
+            ]);
+        }
 
         return response()->json($product->fresh()->load(['creator']), 201);
     }
@@ -169,17 +208,57 @@ class ProductController extends Controller
                 'max:100',
                 Rule::unique('products', 'sku')->ignore($product->id),
             ],
+            'barcode' => [
+                'nullable',
+                'string',
+                'max:100',
+                Rule::unique('products', 'barcode')->ignore($product->id),
+            ],
             'description' => ['nullable', 'string'],
             'stock' => ['nullable', 'integer', 'min:0'],
             'price' => ['nullable', 'numeric', 'min:0'],
             'currency' => ['nullable', 'string', 'size:3'],
+            'weight_grams' => ['nullable', 'integer', 'min:0'],
+            'length_mm' => ['nullable', 'integer', 'min:0'],
+            'width_mm' => ['nullable', 'integer', 'min:0'],
+            'height_mm' => ['nullable', 'integer', 'min:0'],
+            'warranty' => ['nullable', 'string', 'max:255'],
+            'min_order_quantity' => ['nullable', 'integer', 'min:1'],
+            'max_order_quantity' => ['nullable', 'integer', 'min:1', 'gte:min_order_quantity'],
             'status' => ['nullable', 'string', 'max:50'],
             'meta' => ['nullable', 'array'],
         ]);
 
-        $product->fill($data)->save();
+        $oldPrice = (float) $product->price;
+        $oldStock = (int) $product->stock;
+        $product->fill($data);
+        abort_if((int) $product->stock < (int) $product->stock_reserved, 422, 'Stock cannot be lower than reserved stock.');
+        $product->save();
 
-        return response()->json($product->fresh()->load(['creator']));
+        if (array_key_exists('price', $data) && (float) $product->price !== $oldPrice) {
+            PriceHistory::query()->create([
+                'product_id' => $product->id,
+                'actor_id' => $request->user()?->id,
+                'old_price' => $oldPrice,
+                'new_price' => $product->price,
+                'currency' => $product->currency,
+                'reason' => 'admin_update',
+            ]);
+        }
+        if (array_key_exists('stock', $data) && (int) $product->stock !== $oldStock) {
+            InventoryMovement::query()->create([
+                'product_id' => $product->id,
+                'actor_id' => $request->user()?->id,
+                'type' => 'adjustment',
+                'stock_delta' => (int) $product->stock - $oldStock,
+                'reserved_delta' => 0,
+                'stock_after' => (int) $product->stock,
+                'reserved_after' => (int) $product->stock_reserved,
+                'reason' => 'admin_update',
+            ]);
+        }
+
+        return response()->json($product->fresh()->load(['creator', 'variants']));
     }
 
     #[OA\Post(

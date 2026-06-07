@@ -8,11 +8,13 @@ use App\Models\Invoice;
 use App\Models\Item;
 use App\Models\Payment;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Models\Shipment;
-use App\Support\Cart\CartService;
 use App\Support\Accounting\AccountingOutboxService;
+use App\Support\Cart\CartService;
 use App\Support\Checkout\CheckoutPricingService;
 use App\Support\Coupons\CouponService;
+use App\Support\Inventory\InventoryService;
 use App\Support\Invoices\InvoiceAllocationService;
 use App\Support\Invoices\InvoiceStatusService;
 use App\Support\Payments\PaymentGatewayService;
@@ -34,7 +36,8 @@ class PaymentController extends Controller
         protected PaymentGatewayService $paymentGatewayService,
         protected AccountingOutboxService $accountingOutboxService,
         protected CartService $cartService,
-        protected ShippingQuoteService $shippingQuoteService
+        protected ShippingQuoteService $shippingQuoteService,
+        protected InventoryService $inventoryService
     ) {
         $this->middleware('auth:sanctum')->except('callback');
     }
@@ -87,7 +90,8 @@ class PaymentController extends Controller
             'tax' => ['prohibited'],
             'shipping_method_id' => ['nullable', 'integer', 'exists:shipping_methods,id'],
             'items' => ['nullable', 'array', 'min:1'],
-            'items.*.product_id' => ['required', 'integer', 'distinct'],
+            'items.*.product_id' => ['required', 'integer'],
+            'items.*.product_variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
         ]);
 
@@ -104,13 +108,14 @@ class PaymentController extends Controller
             $checkoutItems = $this->cartService->checkoutItems($cart);
             abort_if($checkoutItems->isEmpty(), 422, 'Cart is empty.');
         }
-        $productIds = $checkoutItems->pluck('product_id')->all();
+        $productIds = $checkoutItems->pluck('product_id')->unique()->values()->all();
 
         $couponCode = isset($data['coupon_code']) ? trim((string) $data['coupon_code']) : null;
 
         /** @var Invoice $invoice */
         $invoice = DB::transaction(function () use ($user, $address, $productIds, $checkoutItems, $data, $couponCode, $cart) {
             $products = Product::query()
+                ->with('variants')
                 ->whereIn('id', $productIds)
                 ->whereIn('status', ['active', 'special'])
                 ->lockForUpdate()
@@ -119,22 +124,37 @@ class PaymentController extends Controller
 
             abort_if($products->count() !== count($productIds), 422, 'One or more products are unavailable.');
 
-            $itemsPayload = $checkoutItems->map(function (array $item) use ($products) {
+            $variantIds = $checkoutItems->pluck('product_variant_id')->filter()->unique()->all();
+            $variants = ProductVariant::query()
+                ->whereIn('id', $variantIds)
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            $itemsPayload = $checkoutItems->map(function (array $item) use ($products, $variants) {
                 /** @var Product|null $product */
                 $product = $products->get($item['product_id']);
 
                 abort_if(! $product, 422, 'Product '.$item['product_id'].' not available.');
 
                 $quantity = (int) $item['quantity'];
-                $stock = $product->stock !== null ? (int) $product->stock : null;
-
-                abort_if($stock !== null && $stock < $quantity, 422, "Insufficient stock for {$product->name}.");
+                $variant = ! empty($item['product_variant_id'])
+                    ? $variants->get((int) $item['product_variant_id'])
+                    : null;
+                abort_if(
+                    $product->variants->where('status', 'active')->isNotEmpty() && ! $variant,
+                    422,
+                    "Select a variant for {$product->name}."
+                );
+                $this->inventoryService->assertPurchasable($product, $variant, $quantity);
+                $unitPrice = $variant ? (float) $variant->price : (float) $product->price;
 
                 return [
                     'product' => $product,
+                    'variant' => $variant,
                     'quantity' => $quantity,
-                    'unit_price' => $product->price,
-                    'total' => $product->price * $quantity,
+                    'unit_price' => $unitPrice,
+                    'total' => $unitPrice * $quantity,
                 ];
             });
 
@@ -186,6 +206,7 @@ class PaymentController extends Controller
             $meta['allocation'] = [
                 'reserved_at' => now()->toAtomString(),
                 'last_action' => 'reserved',
+                'state' => 'reserved',
             ];
 
             $invoice = Invoice::query()->create([
@@ -208,28 +229,28 @@ class PaymentController extends Controller
             $itemsPayload->each(function (array $payload) use ($invoice): void {
                 /** @var Product $product */
                 $product = $payload['product'];
+                /** @var ProductVariant|null $variant */
+                $variant = $payload['variant'];
                 $quantity = (int) $payload['quantity'];
 
                 Item::query()->create([
                     'invoice_id' => $invoice->id,
                     'product_id' => $product->id,
-                    'name' => $product->name,
+                    'product_variant_id' => $variant?->id,
+                    'name' => $variant ? "{$product->name} - {$variant->name}" : $product->name,
                     'description' => $product->description,
                     'quantity' => $quantity,
                     'unit_price' => $payload['unit_price'],
                     'total' => $payload['total'],
                     'meta' => [
-                        'sku' => $product->sku,
+                        'sku' => $variant?->sku ?? $product->sku,
+                        'barcode' => $variant?->barcode ?? $product->barcode,
+                        'variant' => $variant?->options,
                         'product_status' => $product->status,
                     ],
                 ]);
 
-                if ($product->stock !== null) {
-                    $product->stock = max(0, (int) $product->stock - $quantity);
-                }
-
-                $product->sold_count = (int) ($product->sold_count ?? 0) + $quantity;
-                $product->save();
+                $this->inventoryService->reserve($product, $variant, $quantity, $invoice);
             });
 
             if ($coupon) {
@@ -671,6 +692,9 @@ class PaymentController extends Controller
 
             if ($targetInvoiceStatus === InvoiceStatusService::PAYMENT_FAILED) {
                 $this->invoiceAllocationService->releaseForFailedPayment($invoice, $reason);
+                $invoice = $invoice->fresh();
+            } elseif ($targetInvoiceStatus === InvoiceStatusService::PAID) {
+                $this->invoiceAllocationService->commitForPaidPayment($invoice);
                 $invoice = $invoice->fresh();
             }
 

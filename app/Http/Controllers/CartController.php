@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Support\Cart\CartService;
 use App\Support\Checkout\CheckoutPricingService;
 use App\Support\Shipping\ShippingQuoteService;
@@ -29,11 +30,15 @@ class CartController extends Controller
         $data = $request->validate([
             'product_id' => ['required', 'integer', 'exists:products,id'],
             'quantity' => ['required', 'integer', 'min:1', 'max:999'],
+            'product_variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
         ]);
 
         $cart = $this->cartService->resolve($request);
         $product = Product::query()->findOrFail($data['product_id']);
-        $this->cartService->add($cart, $product, (int) $data['quantity']);
+        $variant = isset($data['product_variant_id'])
+            ? ProductVariant::query()->findOrFail($data['product_variant_id'])
+            : null;
+        $this->cartService->add($cart, $product, (int) $data['quantity'], $variant);
 
         return response()->json($this->cartService->payload($cart), 201);
     }
@@ -42,20 +47,33 @@ class CartController extends Controller
     {
         $data = $request->validate([
             'quantity' => ['required', 'integer', 'min:1', 'max:999'],
+            'product_variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
         ]);
 
         $cart = $this->cartService->resolve($request);
-        abort_if(! $cart->items()->where('product_id', $product->id)->exists(), 404, 'Cart item not found.');
-        $this->cartService->setQuantity($cart, $product, (int) $data['quantity']);
+        $variant = isset($data['product_variant_id'])
+            ? ProductVariant::query()->findOrFail($data['product_variant_id'])
+            : null;
+        $itemQuery = $cart->items()->where('product_id', $product->id);
+        $variant ? $itemQuery->where('product_variant_id', $variant->id) : $itemQuery->whereNull('product_variant_id');
+        abort_if(! $itemQuery->exists(), 404, 'Cart item not found.');
+        $this->cartService->setQuantity($cart, $product, (int) $data['quantity'], $variant);
 
         return response()->json($this->cartService->payload($cart));
     }
 
     public function destroyItem(Request $request, Product $product): JsonResponse
     {
+        $data = $request->validate([
+            'product_variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
+        ]);
         $cart = $this->cartService->resolve($request, false);
         if ($cart) {
-            $cart->items()->where('product_id', $product->id)->delete();
+            $query = $cart->items()->where('product_id', $product->id);
+            isset($data['product_variant_id'])
+                ? $query->where('product_variant_id', $data['product_variant_id'])
+                : $query->whereNull('product_variant_id');
+            $query->delete();
             $cart->forceFill(['last_activity_at' => now()])->save();
         }
 
@@ -174,6 +192,7 @@ class CartController extends Controller
             'items' => ['nullable', 'array', 'min:1'],
             'items.*.product_id' => ['required', 'integer', 'distinct'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
+            'items.*.product_variant_id' => ['nullable', 'integer', 'exists:product_variants,id'],
         ]);
 
         $items = collect($data['items'] ?? []);
@@ -186,6 +205,7 @@ class CartController extends Controller
         $productIds = $items->pluck('product_id')->all();
 
         $products = Product::query()
+            ->with('variants')
             ->whereIn('id', $productIds)
             ->whereIn('status', ['active', 'special'])
             ->get()
@@ -203,18 +223,27 @@ class CartController extends Controller
                 ];
             }
 
-            $hasStock = $product->stock === null || $product->stock >= $item['quantity'];
+            $variant = ! empty($item['product_variant_id'])
+                ? $product->variants->firstWhere('id', (int) $item['product_variant_id'])
+                : null;
+            $target = $variant ?? $product;
+            $availableQuantity = max(0, (int) $target->stock - (int) $target->stock_reserved);
+            $hasStock = $availableQuantity >= $item['quantity']
+                && (! $variant || $variant->status === 'active');
+            $unitPrice = $variant ? (float) $variant->price : (float) $product->price;
 
             return [
                 'product_id' => $product->id,
                 'name' => $product->name,
-                'price' => $product->price,
+                'product_variant_id' => $variant?->id,
+                'variant_name' => $variant?->name,
+                'price' => $unitPrice,
                 'currency' => $product->currency,
                 'requested_quantity' => $item['quantity'],
-                'available_quantity' => $product->stock,
+                'available_quantity' => $availableQuantity,
                 'available' => $hasStock,
                 'reason' => $hasStock ? null : 'Insufficient stock.',
-                'total' => $product->price * $item['quantity'],
+                'total' => $unitPrice * $item['quantity'],
             ];
         });
 

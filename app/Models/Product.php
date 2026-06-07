@@ -25,14 +25,23 @@ class Product extends Model implements Searchable
         'name',
         'slug',
         'sku',
+        'barcode',
         'summary',
         'content',
         'description',
         'stock',
+        'stock_reserved',
         'sold_count',
         'price',
         'discount_percent',
         'currency',
+        'weight_grams',
+        'length_mm',
+        'width_mm',
+        'height_mm',
+        'warranty',
+        'min_order_quantity',
+        'max_order_quantity',
         'status',
         'meta',
     ];
@@ -41,6 +50,14 @@ class Product extends Model implements Searchable
         'price' => 'decimal:2',
         'discount_percent' => 'integer',
         'sold_count' => 'integer',
+        'stock' => 'integer',
+        'stock_reserved' => 'integer',
+        'weight_grams' => 'integer',
+        'length_mm' => 'integer',
+        'width_mm' => 'integer',
+        'height_mm' => 'integer',
+        'min_order_quantity' => 'integer',
+        'max_order_quantity' => 'integer',
         'meta' => 'array',
     ];
 
@@ -57,6 +74,21 @@ class Product extends Model implements Searchable
     public function cartItems(): HasMany
     {
         return $this->hasMany(CartItem::class);
+    }
+
+    public function variants(): HasMany
+    {
+        return $this->hasMany(ProductVariant::class)->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function inventoryMovements(): HasMany
+    {
+        return $this->hasMany(InventoryMovement::class);
+    }
+
+    public function priceHistories(): HasMany
+    {
+        return $this->hasMany(PriceHistory::class);
     }
 
     public function accountingMapping(): HasOne
@@ -113,7 +145,10 @@ class Product extends Model implements Searchable
 
     public function galleries(): MorphMany
     {
-        return $this->morphMany(Gallery::class, 'model');
+        return $this->morphMany(Gallery::class, 'model')
+            ->orderByDesc('is_primary')
+            ->orderBy('sort_order')
+            ->orderBy('id');
     }
 
     public function getSearchResult(): SearchResult

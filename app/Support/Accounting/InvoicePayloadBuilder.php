@@ -15,6 +15,7 @@ class InvoicePayloadBuilder
             'user',
             'address.city.state',
             'items.product.accountingMapping',
+            'items.variant',
             'payments',
         ]);
 
@@ -62,6 +63,8 @@ class InvoicePayloadBuilder
                 'local_product_id' => $item->product_id,
                 'external_product_id' => $item->product?->accountingMapping?->external_id,
                 'sku' => data_get($item->meta, 'sku', $item->product?->sku),
+                'local_variant_id' => $item->product_variant_id,
+                'variant' => data_get($item->meta, 'variant'),
                 'name' => $item->name,
                 'quantity' => $item->quantity,
                 'unit_price' => (float) $item->unit_price,

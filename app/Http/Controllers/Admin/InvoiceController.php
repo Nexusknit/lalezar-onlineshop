@@ -225,6 +225,13 @@ class InvoiceController extends Controller
                     isset($data['note']) ? (string) $data['note'] : 'admin_status_update'
                 );
             }
+            if (in_array($toStatus, [InvoiceStatusService::CANCELLED, InvoiceStatusService::REFUNDED], true)) {
+                $this->invoiceAllocationService->restoreForCancelledOrRefunded(
+                    $lockedInvoice,
+                    (int) $request->user()->id,
+                    isset($data['note']) ? (string) $data['note'] : 'admin_status_update'
+                );
+            }
 
             return $lockedInvoice->fresh()->load([
                 'user',

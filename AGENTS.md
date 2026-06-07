@@ -40,6 +40,7 @@ This repository is the Laravel backend API for the electrical supplies online sh
   - `app/Support/Coupons/CouponService.php`
   - `app/Support/Invoices/InvoiceAllocationService.php`
   - `app/Support/Invoices/InvoiceStatusService.php`
+  - `app/Support/Inventory/InventoryService.php`
   - `app/Support/Payments/PaymentGatewayService.php`
 - Payment configuration must stay environment-driven. `APP_URL` is the default gateway callback base, `FRONTEND_URL` is the default payment result URL base, and gateway-specific callback envs should only override those when the domains differ.
 - Invoice status transitions must go through `InvoiceStatusService::canTransition(...)`.
@@ -49,6 +50,10 @@ This repository is the Laravel backend API for the electrical supplies online sh
 - Shipping methods may restrict service by state/city and order amount. Final shipping cost must always be recalculated on the backend.
 - The current shipment model is one shipment per invoice. Multi-package fulfillment is a later capability and must not be simulated in invoice metadata.
 - Stock and coupon allocation changes must stay transactional and lock relevant rows.
+- `stock` is total physical stock, `stock_reserved` is pending allocation, and available stock is their difference.
+- Products with active variants require `product_variant_id` in cart and checkout payloads. Price and quantity limits come from the selected variant.
+- Checkout reserves inventory; successful payment commits the sale; failure/cancel releases reservations; refund restores sold stock. Keep these transitions idempotent through invoice allocation metadata.
+- Every inventory mutation must write `inventory_movements`; admin price changes must write `price_histories`.
 - Runtime merchant settings are stored through `app/Support/Settings/StoreSettingService.php`; code must retain config/env fallbacks when a setting has not been saved.
 - Admin dashboard, coupon, moderation, support, access-control, invoice, and settings endpoints must remain permission-aware and covered by feature tests.
 - Optional accounting integration boundaries live in `app/Support/Accounting`; provider-specific details must implement `AccountingProviderInterface` without entering checkout core.

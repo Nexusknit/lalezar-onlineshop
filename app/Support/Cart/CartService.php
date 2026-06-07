@@ -4,6 +4,7 @@ namespace App\Support\Cart;
 
 use App\Models\Cart;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Models\User;
 use App\Support\Checkout\CheckoutPricingService;
 use App\Support\Loaders\ProductLoader;
@@ -47,11 +48,15 @@ class CartService
         ]);
     }
 
-    public function add(Cart $cart, Product $product, int $quantity): Cart
+    public function add(Cart $cart, Product $product, int $quantity, ?ProductVariant $variant = null): Cart
     {
-        $item = $cart->items()->firstOrNew(['product_id' => $product->id]);
+        $this->assertVariantSelection($product, $variant);
+        $item = $cart->items()->firstOrNew([
+            'product_id' => $product->id,
+            'product_variant_id' => $variant?->id,
+        ]);
         $requested = (int) ($item->exists ? $item->quantity : 0) + $quantity;
-        $this->assertQuantityAvailable($product, $requested);
+        $this->assertQuantityAvailable($product, $variant, $requested);
         $item->quantity = $requested;
         $item->save();
         $this->touch($cart);
@@ -59,11 +64,12 @@ class CartService
         return $cart;
     }
 
-    public function setQuantity(Cart $cart, Product $product, int $quantity): Cart
+    public function setQuantity(Cart $cart, Product $product, int $quantity, ?ProductVariant $variant = null): Cart
     {
-        $this->assertQuantityAvailable($product, $quantity);
+        $this->assertVariantSelection($product, $variant);
+        $this->assertQuantityAvailable($product, $variant, $quantity);
         $cart->items()->updateOrCreate(
-            ['product_id' => $product->id],
+            ['product_id' => $product->id, 'product_variant_id' => $variant?->id],
             ['quantity' => $quantity]
         );
         $this->touch($cart);
@@ -76,6 +82,7 @@ class CartService
         return DB::transaction(function () use ($cart, $items): Cart {
             $productIds = collect($items)->pluck('product_id')->unique()->values();
             $products = Product::query()
+                ->with('variants')
                 ->whereIn('id', $productIds)
                 ->whereIn('status', ['active', 'special'])
                 ->get()
@@ -85,13 +92,20 @@ class CartService
 
             foreach ($items as $item) {
                 $product = $products->get((int) $item['product_id']);
-                $this->assertQuantityAvailable($product, (int) $item['quantity']);
+                $variant = ! empty($item['product_variant_id'])
+                    ? $product->variants->firstWhere('id', (int) $item['product_variant_id'])
+                    : null;
+                $this->assertVariantSelection($product, $variant);
+                $this->assertQuantityAvailable($product, $variant, (int) $item['quantity']);
             }
 
             $cart->items()->delete();
             foreach ($items as $item) {
                 $cart->items()->create([
                     'product_id' => (int) $item['product_id'],
+                    'product_variant_id' => ! empty($item['product_variant_id'])
+                        ? (int) $item['product_variant_id']
+                        : null,
                     'quantity' => (int) $item['quantity'],
                 ]);
             }
@@ -104,20 +118,25 @@ class CartService
     public function merge(Cart $guestCart, Cart $userCart): Cart
     {
         DB::transaction(function () use ($guestCart, $userCart): void {
-            $guestCart->load('items.product');
+            $guestCart->load(['items.product.variants', 'items.variant']);
             foreach ($guestCart->items as $guestItem) {
                 if (! $guestItem->product || ! in_array($guestItem->product->status, ['active', 'special'], true)) {
                     continue;
                 }
 
-                $current = $userCart->items()->where('product_id', $guestItem->product_id)->first();
+                $current = $userCart->items()
+                    ->where('product_id', $guestItem->product_id)
+                    ->where('product_variant_id', $guestItem->product_variant_id)
+                    ->first();
                 $quantity = (int) ($current?->quantity ?? 0) + (int) $guestItem->quantity;
-                if ($guestItem->product->stock !== null) {
-                    $quantity = min($quantity, (int) $guestItem->product->stock);
-                }
+                $target = $guestItem->variant ?? $guestItem->product;
+                $quantity = min($quantity, max(0, (int) $target->stock - (int) $target->stock_reserved));
                 if ($quantity > 0) {
                     $userCart->items()->updateOrCreate(
-                        ['product_id' => $guestItem->product_id],
+                        [
+                            'product_id' => $guestItem->product_id,
+                            'product_variant_id' => $guestItem->product_variant_id,
+                        ],
                         ['quantity' => $quantity]
                     );
                 }
@@ -138,22 +157,34 @@ class CartService
             'items.product.attributes',
             'items.product.galleries',
             'items.product.comments.user',
+            'items.product.variants',
+            'items.variant',
         ]);
 
         $items = $cart->items->map(function ($item): array {
             $product = $item->product;
+            $variant = $item->variant;
+            $target = $variant ?? $product;
+            $availableQuantity = $target
+                ? max(0, (int) $target->stock - (int) $target->stock_reserved)
+                : 0;
             $available = $product
                 && in_array($product->status, ['active', 'special'], true)
-                && ($product->stock === null || (int) $product->stock >= (int) $item->quantity);
+                && (! $variant || $variant->status === 'active')
+                && $availableQuantity >= (int) $item->quantity;
+            $unitPrice = $variant ? (float) $variant->price : (float) $product?->price;
 
             return [
                 'id' => $item->id,
                 'product_id' => $item->product_id,
+                'product_variant_id' => $item->product_variant_id,
                 'quantity' => (int) $item->quantity,
                 'available' => $available,
-                'available_quantity' => $product?->stock,
+                'available_quantity' => $availableQuantity,
                 'product' => $product ? ProductLoader::make($product) : null,
-                'line_total' => $product ? round((float) $product->price * (int) $item->quantity, 2) : 0,
+                'variant' => $variant ? ProductLoader::variant($variant) : null,
+                'unit_price' => $unitPrice,
+                'line_total' => $product ? round($unitPrice * (int) $item->quantity, 2) : 0,
             ];
         })->values();
 
@@ -180,17 +211,39 @@ class CartService
 
     public function checkoutItems(Cart $cart): Collection
     {
-        return $cart->items()->get(['product_id', 'quantity'])
+        return $cart->items()->get(['product_id', 'product_variant_id', 'quantity'])
             ->map(fn ($item): array => [
                 'product_id' => (int) $item->product_id,
+                'product_variant_id' => $item->product_variant_id ? (int) $item->product_variant_id : null,
                 'quantity' => (int) $item->quantity,
             ]);
     }
 
-    private function assertQuantityAvailable(Product $product, int $quantity): void
+    private function assertVariantSelection(Product $product, ?ProductVariant $variant): void
+    {
+        abort_if(
+            $variant && (int) $variant->product_id !== (int) $product->id,
+            422,
+            'Selected variant does not belong to the product.'
+        );
+        abort_if(
+            ! $variant && $product->variants()->where('status', 'active')->exists(),
+            422,
+            'Select a product variant before adding it to the cart.'
+        );
+    }
+
+    private function assertQuantityAvailable(Product $product, ?ProductVariant $variant, int $quantity): void
     {
         abort_if(! in_array($product->status, ['active', 'special'], true), 422, 'Product is unavailable.');
-        abort_if($product->stock !== null && (int) $product->stock < $quantity, 422, 'Insufficient product stock.');
+        abort_if($variant && $variant->status !== 'active', 422, 'Product variant is unavailable.');
+        $target = $variant ?? $product;
+        $minimum = max(1, (int) ($target->min_order_quantity ?? 1));
+        $maximum = $target->max_order_quantity !== null ? (int) $target->max_order_quantity : null;
+        $available = max(0, (int) $target->stock - (int) $target->stock_reserved);
+        abort_if($quantity < $minimum, 422, "Minimum order quantity is {$minimum}.");
+        abort_if($maximum !== null && $quantity > $maximum, 422, "Maximum order quantity is {$maximum}.");
+        abort_if($available < $quantity, 422, 'Insufficient product stock.');
     }
 
     private function touch(Cart $cart): void

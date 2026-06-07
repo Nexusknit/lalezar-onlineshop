@@ -195,8 +195,9 @@ class UserCommerceFlowTest extends TestCase
 
         $this->assertDatabaseHas('products', [
             'id' => $product->id,
-            'stock' => 8,
-            'sold_count' => 2,
+            'stock' => 10,
+            'stock_reserved' => 2,
+            'sold_count' => 0,
         ]);
     }
 
@@ -370,8 +371,9 @@ class UserCommerceFlowTest extends TestCase
 
         $this->assertDatabaseHas('products', [
             'id' => $product->id,
-            'stock' => 8,
-            'sold_count' => 2,
+            'stock' => 10,
+            'stock_reserved' => 2,
+            'sold_count' => 0,
         ]);
     }
 
@@ -726,6 +728,7 @@ class UserCommerceFlowTest extends TestCase
         $this->assertDatabaseHas('products', [
             'id' => $productId,
             'stock' => 10,
+            'stock_reserved' => 0,
             'sold_count' => 0,
         ]);
 
@@ -781,8 +784,9 @@ class UserCommerceFlowTest extends TestCase
 
         $this->assertDatabaseHas('products', [
             'id' => $productId,
-            'stock' => 9,
-            'sold_count' => 1,
+            'stock' => 10,
+            'stock_reserved' => 1,
+            'sold_count' => 0,
         ]);
 
         $this->assertDatabaseHas('coupon_usages', [
@@ -812,6 +816,7 @@ class UserCommerceFlowTest extends TestCase
         $this->assertDatabaseHas('products', [
             'id' => $productId,
             'stock' => 9,
+            'stock_reserved' => 0,
             'sold_count' => 1,
         ]);
     }
