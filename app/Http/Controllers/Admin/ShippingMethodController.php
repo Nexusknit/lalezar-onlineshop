@@ -43,6 +43,8 @@ class ShippingMethodController extends Controller
             'code' => ['required', 'alpha_dash', 'max:60', Rule::unique('shipping_methods')->ignore($method)],
             'status' => ['required', Rule::in(['active', 'inactive'])],
             'base_cost' => ['required', 'numeric', 'min:0'],
+            'cost_per_kg' => ['nullable', 'numeric', 'min:0'],
+            'max_weight_grams' => ['nullable', 'integer', 'min:1'],
             'free_threshold' => ['nullable', 'numeric', 'min:0'],
             'state_ids' => ['nullable', 'array'],
             'state_ids.*' => ['integer', 'exists:states,id'],

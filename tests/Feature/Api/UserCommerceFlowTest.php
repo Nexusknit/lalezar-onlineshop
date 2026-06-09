@@ -581,6 +581,37 @@ class UserCommerceFlowTest extends TestCase
         ]);
     }
 
+    public function test_manual_payment_verification_is_unavailable_when_disabled(): void
+    {
+        $context = $this->createCheckoutInvoiceContext('09120000098');
+        $invoiceId = $context['invoice_id'];
+
+        $initiateResponse = $this->postJson('/api/user/payments/initiate', [
+            'invoice_id' => $invoiceId,
+        ])->assertOk();
+
+        $paymentId = (int) $initiateResponse->json('payment.id');
+        Config::set('payment.user_verify_enabled', false);
+
+        $this->postJson("/api/user/payments/{$paymentId}/verify", [
+            'status' => 'success',
+            'reference' => 'MUST-NOT-BE-ACCEPTED',
+        ])->assertNotFound();
+
+        $this->assertDatabaseHas('payments', [
+            'id' => $paymentId,
+            'status' => 'pending',
+        ]);
+        $this->assertDatabaseMissing('payments', [
+            'id' => $paymentId,
+            'reference' => 'MUST-NOT-BE-ACCEPTED',
+        ]);
+        $this->assertDatabaseHas('invoices', [
+            'id' => $invoiceId,
+            'status' => InvoiceStatusService::PAYMENT_PENDING,
+        ]);
+    }
+
     public function test_user_cannot_verify_another_users_payment(): void
     {
         $context = $this->createCheckoutInvoiceContext('09120000013');

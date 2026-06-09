@@ -219,6 +219,17 @@ class CartService
             ]);
     }
 
+    public function weightGrams(Cart $cart): int
+    {
+        $cart->loadMissing(['items.product', 'items.variant']);
+
+        return (int) $cart->items->sum(function ($item): int {
+            $weight = (int) ($item->variant?->weight_grams ?? $item->product?->weight_grams ?? 0);
+
+            return max(0, $weight) * max(0, (int) $item->quantity);
+        });
+    }
+
     private function assertVariantSelection(Product $product, ?ProductVariant $variant): void
     {
         abort_if(

@@ -165,6 +165,12 @@ class PaymentController extends Controller
             abort_if($currency === null, 422, 'Products must share a common currency.');
 
             $subtotal = (float) $itemsPayload->sum('total');
+            $totalWeightGrams = (int) $itemsPayload->sum(function (array $payload): int {
+                $target = $payload['variant'] ?? $payload['product'];
+                $weight = (int) ($target->weight_grams ?? $payload['product']->weight_grams ?? 0);
+
+                return max(0, $weight) * max(0, (int) $payload['quantity']);
+            });
             $coupon = null;
             $discount = 0.0;
 
@@ -183,7 +189,8 @@ class PaymentController extends Controller
             $shippingOption = $this->shippingQuoteService->selected(
                 $total,
                 $address->loadMissing('city.state'),
-                isset($data['shipping_method_id']) ? (int) $data['shipping_method_id'] : null
+                isset($data['shipping_method_id']) ? (int) $data['shipping_method_id'] : null,
+                $totalWeightGrams
             );
             $pricing = CheckoutPricingService::calculate($total, (float) $shippingOption['cost']);
             $shipping = $pricing['shipping'];
@@ -223,6 +230,7 @@ class PaymentController extends Controller
                 'shipping' => $shipping,
                 'total' => $grandTotal,
                 'issued_at' => now(),
+                'due_at' => now()->addMinutes((int) config('checkout.reservation_ttl_minutes', 20)),
                 'meta' => $meta,
             ]);
 
@@ -331,6 +339,10 @@ class PaymentController extends Controller
                 $this->invoiceAllocationService->reserveForRetry($invoice);
                 $reservedForRetry = true;
             }
+
+            $invoice->update([
+                'due_at' => now()->addMinutes((int) config('checkout.reservation_ttl_minutes', 20)),
+            ]);
 
             /** @var Payment|null $pendingPayment */
             $pendingPayment = Payment::query()
@@ -475,6 +487,12 @@ class PaymentController extends Controller
     public function verify(Request $request, Payment $payment): JsonResponse
     {
         abort_if($payment->user_id !== $request->user()->id, 404, 'Payment not found.');
+        abort_unless(
+            (bool) config('payment.user_verify_enabled', false)
+            && (string) $payment->method === PaymentGatewayService::PROVIDER_MOCK,
+            404,
+            'Payment verification endpoint is unavailable.'
+        );
 
         $data = $request->validate([
             'status' => ['required', Rule::in(['success', 'failed'])],
@@ -687,6 +705,7 @@ class PaymentController extends Controller
 
             $invoice->update([
                 'status' => $targetInvoiceStatus,
+                'due_at' => null,
                 'meta' => $invoiceMeta,
             ]);
 

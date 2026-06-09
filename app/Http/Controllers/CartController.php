@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Cart;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Support\Cart\CartService;
@@ -102,7 +103,7 @@ class CartController extends Controller
     {
         $request->validate(['guest_token' => ['required', 'uuid']]);
         $userCart = $this->cartService->resolve($request);
-        $guestCart = \App\Models\Cart::query()
+        $guestCart = Cart::query()
             ->whereNull('user_id')
             ->where('token', $request->string('guest_token'))
             ->first();
@@ -138,7 +139,11 @@ class CartController extends Controller
         }
 
         return response()->json([
-            'options' => $this->shippingQuoteService->options($subtotal, $address),
+            'options' => $this->shippingQuoteService->options(
+                $subtotal,
+                $address,
+                $cart ? $this->cartService->weightGrams($cart) : 0
+            ),
         ]);
     }
 

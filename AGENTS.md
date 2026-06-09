@@ -24,7 +24,10 @@ This repository is the Laravel backend API for the electrical supplies online sh
 - Migrate and seed: `php artisan migrate --seed`
 - Serve API: `php artisan serve`
 - Run queue worker locally: `php artisan queue:listen --tries=1`
+- Run scheduler locally: `php artisan schedule:work`
+- Release expired checkout reservations manually: `php artisan inventory:release-expired-reservations`
 - Run tests: `composer test` or `php artisan test`
+- Audit PHP dependencies: `composer audit --locked`
 - Format PHP: `vendor/bin/pint`
 
 ## Architecture Notes
@@ -47,13 +50,15 @@ This repository is the Laravel backend API for the electrical supplies online sh
 - `Invoice` is the order aggregate for this project. Do not introduce a parallel `Order` model without a migration plan for payments, items, coupons, accounting mappings, and shipment ownership.
 - Authenticated carts are identified by `user_id`; guest carts use the `X-Cart-Token` header. Login must merge the guest cart into the user cart.
 - Checkout must prefer persisted server cart items. Legacy item payloads are only retained for API compatibility and tests.
-- Shipping methods may restrict service by state/city and order amount. Final shipping cost must always be recalculated on the backend.
+- Shipping methods may restrict service by state/city, order amount, and maximum weight. Final shipping cost, including per-kilogram charges, must always be recalculated on the backend.
 - The current shipment model is one shipment per invoice. Multi-package fulfillment is a later capability and must not be simulated in invoice metadata.
 - Stock and coupon allocation changes must stay transactional and lock relevant rows.
 - `stock` is total physical stock, `stock_reserved` is pending allocation, and available stock is their difference.
 - Products with active variants require `product_variant_id` in cart and checkout payloads. Price and quantity limits come from the selected variant.
 - Checkout reserves inventory; successful payment commits the sale; failure/cancel releases reservations; refund restores sold stock. Keep these transitions idempotent through invoice allocation metadata.
+- Checkout reservations expire according to `CHECKOUT_RESERVATION_TTL_MINUTES`. Production must run Laravel scheduler every minute so expired inventory and coupons are released.
 - Every inventory mutation must write `inventory_movements`; admin price changes must write `price_histories`.
+- Accounting product imports are inventory mutations and must use `InventoryService`; imported stock may never be lower than active reserved stock.
 - Runtime merchant settings are stored through `app/Support/Settings/StoreSettingService.php`; code must retain config/env fallbacks when a setting has not been saved.
 - Admin dashboard, coupon, moderation, support, access-control, invoice, and settings endpoints must remain permission-aware and covered by feature tests.
 - Optional accounting integration boundaries live in `app/Support/Accounting`; provider-specific details must implement `AccountingProviderInterface` without entering checkout core.
@@ -67,6 +72,7 @@ This repository is the Laravel backend API for the electrical supplies online sh
 - Public endpoints should only return active/published entities unless a use case explicitly requires otherwise.
 - Admin endpoints must require Sanctum auth and permission middleware.
 - Payment credentials, SMS keys, and future accounting credentials must never be persisted in the general settings table.
+- The authenticated manual payment verification endpoint is mock-only and must remain disabled outside automated/local tests through `PAYMENT_USER_VERIFY_ENABLED=false`.
 - Accounting tokens/API keys remain environment-only; base URL, paths and feature switches may be managed as non-secret settings.
 - Add or update feature tests for checkout, payment, inventory, authorization, and accounting integration behavior.
 - Keep `.env.example` aligned with any new config keys.
@@ -98,5 +104,6 @@ Recommended boundaries:
 ## Before Finishing Backend Work
 
 - Run `composer test` when dependencies and database configuration are available.
+- Run `composer audit --locked` and verify the GitHub Actions backend workflow remains green.
 - For API contract changes, update OpenAPI annotations and related frontend endpoint/store usage.
 - For new permissions, update `PermissionSeeder`, admin UI permission checks, and tests.

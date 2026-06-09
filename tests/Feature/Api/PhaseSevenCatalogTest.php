@@ -5,6 +5,7 @@ namespace Tests\Feature\Api;
 use App\Models\Address;
 use App\Models\City;
 use App\Models\Coupon;
+use App\Models\Invoice;
 use App\Models\Permission;
 use App\Models\Product;
 use App\Models\ProductVariant;
@@ -13,6 +14,7 @@ use App\Models\State;
 use App\Models\User;
 use App\Support\Invoices\InvoiceStatusService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -114,6 +116,41 @@ class PhaseSevenCatalogTest extends TestCase
             'id' => $variant->id,
             'stock' => 7,
             'stock_reserved' => 1,
+        ]);
+    }
+
+    public function test_expired_checkout_releases_inventory_and_fails_pending_payment(): void
+    {
+        [$user, $address, $product, $variant] = $this->commerceContext();
+        Sanctum::actingAs($user);
+
+        $this->postJson('/api/cart/items', [
+            'product_id' => $product->id,
+            'product_variant_id' => $variant->id,
+            'quantity' => 2,
+        ])->assertCreated();
+        $checkout = $this->postJson('/api/user/checkout', ['address_id' => $address->id])->assertOk();
+        $payment = $this->postJson('/api/user/payments/initiate', [
+            'invoice_id' => $checkout->json('id'),
+        ])->assertOk();
+
+        Invoice::query()->whereKey($checkout->json('id'))->update(['due_at' => now()->subMinute()]);
+
+        $this->assertSame(0, Artisan::call('inventory:release-expired-reservations'));
+
+        $this->assertDatabaseHas('product_variants', [
+            'id' => $variant->id,
+            'stock' => 7,
+            'stock_reserved' => 0,
+        ]);
+        $this->assertDatabaseHas('payments', [
+            'id' => $payment->json('payment.id'),
+            'status' => 'failed',
+        ]);
+        $this->assertDatabaseHas('invoices', [
+            'id' => $checkout->json('id'),
+            'status' => InvoiceStatusService::PAYMENT_FAILED,
+            'due_at' => null,
         ]);
     }
 

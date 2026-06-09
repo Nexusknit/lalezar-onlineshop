@@ -7,6 +7,7 @@ use App\Models\Invoice;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
 
 class InventoryService
 {
@@ -111,6 +112,48 @@ class InventoryService
         $this->record($product, $variant, $invoice, $actorId, 'restore', $quantity, 0, $reason);
     }
 
+    /**
+     * Adjust physical stock through the inventory ledger.
+     *
+     * Callers must hold a database row lock for the target.
+     *
+     * @param  array<string, mixed>  $meta
+     */
+    public function adjustStock(
+        Product $product,
+        ?ProductVariant $variant,
+        int $newStock,
+        ?int $actorId = null,
+        ?string $reason = null,
+        array $meta = []
+    ): void {
+        $target = $variant ?? $product;
+        $newStock = max(0, $newStock);
+        $oldStock = (int) $target->stock;
+
+        if ($newStock < (int) $target->stock_reserved) {
+            throw new RuntimeException('Stock cannot be lower than active reserved stock.');
+        }
+
+        if ($newStock === $oldStock) {
+            return;
+        }
+
+        $target->stock = $newStock;
+        $target->save();
+        $this->record(
+            $product,
+            $variant,
+            null,
+            $actorId,
+            'adjustment',
+            $newStock - $oldStock,
+            0,
+            $reason,
+            $meta
+        );
+    }
+
     private function record(
         Product $product,
         ?ProductVariant $variant,
@@ -119,7 +162,8 @@ class InventoryService
         string $type,
         int $stockDelta,
         int $reservedDelta,
-        ?string $reason = null
+        ?string $reason = null,
+        array $meta = []
     ): void {
         /** @var Product|ProductVariant $target */
         $target = $variant ?? $product;
@@ -135,6 +179,7 @@ class InventoryService
             'stock_after' => (int) $target->stock,
             'reserved_after' => (int) $target->stock_reserved,
             'reason' => $reason,
+            'meta' => $meta ?: null,
         ]);
     }
 }

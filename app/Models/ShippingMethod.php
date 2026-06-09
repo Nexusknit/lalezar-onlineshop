@@ -12,6 +12,8 @@ class ShippingMethod extends Model
         'code',
         'status',
         'base_cost',
+        'cost_per_kg',
+        'max_weight_grams',
         'free_threshold',
         'state_ids',
         'city_ids',
@@ -23,6 +25,8 @@ class ShippingMethod extends Model
 
     protected $casts = [
         'base_cost' => 'decimal:2',
+        'cost_per_kg' => 'decimal:2',
+        'max_weight_grams' => 'integer',
         'free_threshold' => 'decimal:2',
         'state_ids' => 'array',
         'city_ids' => 'array',

@@ -2,6 +2,7 @@
 
 use App\Support\Accounting\AccountingConfiguration;
 use App\Support\Accounting\AccountingOutboxService;
+use App\Support\Invoices\ExpiredReservationService;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -30,3 +31,16 @@ Schedule::command('accounting:sync-products')
     ->cron((string) config('accounting.product_sync_cron', '0 * * * *'))
     ->withoutOverlapping()
     ->when(fn (): bool => app(AccountingConfiguration::class)->automaticProductSyncEnabled());
+
+Artisan::command('inventory:release-expired-reservations {--limit=500}', function (
+    ExpiredReservationService $service
+) {
+    $released = $service->releaseExpired((int) $this->option('limit'));
+    $this->info("Released {$released} expired inventory reservation(s).");
+
+    return self::SUCCESS;
+})->purpose('Release expired checkout inventory and coupon reservations');
+
+Schedule::command('inventory:release-expired-reservations')
+    ->everyMinute()
+    ->withoutOverlapping();

@@ -8,6 +8,7 @@ return [
     'default_provider' => env('PAYMENT_PROVIDER', 'mock_gateway'),
     'callback_base_url' => env('PAYMENT_CALLBACK_BASE_URL', $appUrl),
     'frontend_callback_url' => env('PAYMENT_FRONTEND_CALLBACK_URL', "{$frontendUrl}/payment/callback"),
+    'user_verify_enabled' => (bool) env('PAYMENT_USER_VERIFY_ENABLED', false),
 
     'providers' => [
         'mock_gateway' => [

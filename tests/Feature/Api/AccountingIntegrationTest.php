@@ -10,9 +10,15 @@ use App\Models\Invoice;
 use App\Models\Item;
 use App\Models\Payment;
 use App\Models\Permission;
+use App\Models\Product;
 use App\Models\Setting;
 use App\Models\User;
+use App\Support\Accounting\AccountingConfiguration;
+use App\Support\Accounting\AccountingOutboxService;
 use App\Support\Accounting\Contracts\AccountingProviderInterface;
+use App\Support\Accounting\InvoicePayloadBuilder;
+use App\Support\Accounting\ProductImportService;
+use App\Support\Accounting\Providers\GenericRestAccountingProvider;
 use App\Support\Invoices\InvoiceStatusService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -32,7 +38,7 @@ class AccountingIntegrationTest extends TestCase
 
         $context = $this->paidInvoiceContext();
 
-        app(\App\Support\Accounting\AccountingOutboxService::class)
+        app(AccountingOutboxService::class)
             ->dispatchPaidInvoiceSafely($context['invoice']);
 
         Queue::assertNothingPushed();
@@ -93,9 +99,9 @@ class AccountingIntegrationTest extends TestCase
 
         $job = new PushInvoiceToAccountingJob($log->id, $context['invoice']->id);
         $job->handle(
-            app(\App\Support\Accounting\AccountingConfiguration::class),
+            app(AccountingConfiguration::class),
             $provider,
-            app(\App\Support\Accounting\InvoicePayloadBuilder::class)
+            app(InvoicePayloadBuilder::class)
         );
 
         $mapping = AccountingInvoiceMapping::query()->where('invoice_id', $context['invoice']->id)->firstOrFail();
@@ -112,9 +118,9 @@ class AccountingIntegrationTest extends TestCase
             'status' => AccountingSyncLog::STATUS_QUEUED,
         ]);
         (new PushInvoiceToAccountingJob($secondLog->id, $context['invoice']->id))->handle(
-            app(\App\Support\Accounting\AccountingConfiguration::class),
+            app(AccountingConfiguration::class),
             $provider,
-            app(\App\Support\Accounting\InvoicePayloadBuilder::class)
+            app(InvoicePayloadBuilder::class)
         );
 
         $this->assertSame(1, $provider->invoicePushCount);
@@ -173,9 +179,9 @@ class AccountingIntegrationTest extends TestCase
         ]);
 
         (new ImportAccountingProductsJob($log->id))->handle(
-            app(\App\Support\Accounting\AccountingConfiguration::class),
+            app(AccountingConfiguration::class),
             $provider,
-            app(\App\Support\Accounting\ProductImportService::class)
+            app(ProductImportService::class)
         );
 
         $this->assertDatabaseHas('products', [
@@ -187,6 +193,83 @@ class AccountingIntegrationTest extends TestCase
             'provider' => 'generic_rest',
             'external_id' => 'PRD-100',
         ]);
+        $product = Product::query()->where('sku', 'RCCB-100')->firstOrFail();
+        $this->assertDatabaseHas('inventory_movements', [
+            'product_id' => $product->id,
+            'type' => 'adjustment',
+            'stock_delta' => 12,
+            'reason' => 'accounting_sync',
+        ]);
+        $this->assertDatabaseHas('price_histories', [
+            'product_id' => $product->id,
+            'new_price' => 3500000,
+            'reason' => 'accounting_sync',
+        ]);
+        $this->assertSame(AccountingSyncLog::STATUS_SUCCEEDED, $log->fresh()->status);
+    }
+
+    public function test_product_import_cannot_reduce_stock_below_active_reservations(): void
+    {
+        $this->enableAccounting();
+        $admin = User::factory()->create();
+        config()->set('accounting.product_creator_id', $admin->id);
+        $product = Product::query()->create([
+            'creator_id' => $admin->id,
+            'name' => 'کنتاکتور تست',
+            'slug' => 'accounting-reserved-contactor',
+            'sku' => 'CNT-RESERVED',
+            'stock' => 10,
+            'stock_reserved' => 6,
+            'price' => 2000000,
+            'currency' => 'IRR',
+            'status' => 'active',
+        ]);
+        $provider = new FakeAccountingProvider;
+        $provider->products = [[
+            'id' => 'PRD-RESERVED',
+            'name' => 'کنتاکتور تست',
+            'sku' => 'CNT-RESERVED',
+            'stock' => 4,
+            'price' => 2100000,
+            'currency' => 'IRR',
+            'status' => 'active',
+        ]];
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Stock cannot be lower than active reserved stock.');
+
+        try {
+            app(ProductImportService::class)->import($provider);
+        } finally {
+            $this->assertSame(10, (int) $product->fresh()->stock);
+            $this->assertSame(2000000.0, (float) $product->fresh()->price);
+            $this->assertDatabaseMissing('accounting_product_mappings', [
+                'external_id' => 'PRD-RESERVED',
+            ]);
+        }
+    }
+
+    public function test_paid_invoice_is_pushed_after_order_advances_beyond_paid_status(): void
+    {
+        $this->enableAccounting();
+        $provider = new FakeAccountingProvider;
+        $context = $this->paidInvoiceContext();
+        $context['invoice']->update(['status' => InvoiceStatusService::PROCESSING]);
+        $log = AccountingSyncLog::query()->create([
+            'provider' => 'generic_rest',
+            'operation' => 'invoice_push',
+            'syncable_type' => Invoice::class,
+            'syncable_id' => $context['invoice']->id,
+            'status' => AccountingSyncLog::STATUS_QUEUED,
+        ]);
+
+        (new PushInvoiceToAccountingJob($log->id, $context['invoice']->id))->handle(
+            app(AccountingConfiguration::class),
+            $provider,
+            app(InvoicePayloadBuilder::class)
+        );
+
+        $this->assertSame(1, $provider->invoicePushCount);
         $this->assertSame(AccountingSyncLog::STATUS_SUCCEEDED, $log->fresh()->status);
     }
 
@@ -206,9 +289,9 @@ class AccountingIntegrationTest extends TestCase
 
         try {
             (new PushInvoiceToAccountingJob($log->id, $context['invoice']->id))->handle(
-                app(\App\Support\Accounting\AccountingConfiguration::class),
+                app(AccountingConfiguration::class),
                 $provider,
-                app(\App\Support\Accounting\InvoicePayloadBuilder::class)
+                app(InvoicePayloadBuilder::class)
             );
             $this->fail('Expected accounting provider failure.');
         } catch (RuntimeException $exception) {
@@ -234,7 +317,7 @@ class AccountingIntegrationTest extends TestCase
             ], 201),
         ]);
 
-        $provider = app(\App\Support\Accounting\Providers\GenericRestAccountingProvider::class);
+        $provider = app(GenericRestAccountingProvider::class);
 
         $this->assertTrue((bool) data_get($provider->healthCheck(), 'ok'));
         $this->assertSame('P-1', data_get($provider->fetchProducts()['items'], '0.id'));

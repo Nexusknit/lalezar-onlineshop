@@ -40,10 +40,11 @@ class PushInvoiceToAccountingJob implements ShouldQueue
             return;
         }
 
-        if (! $configuration->invoiceSyncEnabled() || (string) $invoice->status !== 'paid') {
+        $hasSuccessfulPayment = $invoice->payments()->where('status', 'paid')->exists();
+        if (! $configuration->invoiceSyncEnabled() || ! $hasSuccessfulPayment) {
             $log->update([
                 'status' => AccountingSyncLog::STATUS_SKIPPED,
-                'error' => 'Accounting invoice sync is disabled or invoice is not paid.',
+                'error' => 'Accounting invoice sync is disabled or invoice has no successful payment.',
                 'finished_at' => now(),
             ]);
 

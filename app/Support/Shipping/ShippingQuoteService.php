@@ -9,19 +9,24 @@ use Illuminate\Support\Collection;
 
 class ShippingQuoteService
 {
-    public function options(float $subtotal, ?Address $address = null): Collection
+    public function options(float $subtotal, ?Address $address = null, int $weightGrams = 0): Collection
     {
-        $methods = ShippingMethod::query()
+        $activeMethods = ShippingMethod::query()
             ->where('status', 'active')
             ->orderBy('sort_order')
             ->orderBy('id')
-            ->get()
-            ->filter(fn (ShippingMethod $method): bool => $this->supports($method, $address))
-            ->map(fn (ShippingMethod $method): array => $this->quote($method, $subtotal))
+            ->get();
+        $methods = $activeMethods
+            ->filter(fn (ShippingMethod $method): bool => $this->supports($method, $address, $weightGrams))
+            ->map(fn (ShippingMethod $method): array => $this->quote($method, $subtotal, $weightGrams))
             ->values();
 
         if ($methods->isNotEmpty()) {
             return $methods;
+        }
+
+        if ($activeMethods->isNotEmpty()) {
+            return collect();
         }
 
         $legacy = CheckoutPricingService::calculate($subtotal);
@@ -35,12 +40,14 @@ class ShippingQuoteService
             'total' => $legacy['total'],
             'estimated_days_min' => null,
             'estimated_days_max' => null,
+            'total_weight_grams' => max(0, $weightGrams),
+            'weight_surcharge' => 0,
         ]]);
     }
 
-    public function selected(float $subtotal, ?Address $address, ?int $methodId): array
+    public function selected(float $subtotal, ?Address $address, ?int $methodId, int $weightGrams = 0): array
     {
-        $options = $this->options($subtotal, $address);
+        $options = $this->options($subtotal, $address, $weightGrams);
         $selected = $methodId
             ? $options->firstWhere('id', $methodId)
             : $options->first();
@@ -50,11 +57,15 @@ class ShippingQuoteService
         return $selected;
     }
 
-    private function quote(ShippingMethod $method, float $subtotal): array
+    private function quote(ShippingMethod $method, float $subtotal, int $weightGrams): array
     {
-        $cost = (float) $method->base_cost;
+        $weightSurcharge = $weightGrams > 0
+            ? ceil($weightGrams / 1000) * (float) $method->cost_per_kg
+            : 0;
+        $cost = (float) $method->base_cost + $weightSurcharge;
         if ($method->free_threshold !== null && $subtotal >= (float) $method->free_threshold) {
             $cost = 0;
+            $weightSurcharge = 0;
         }
 
         $pricing = CheckoutPricingService::calculate($subtotal, $cost);
@@ -68,11 +79,17 @@ class ShippingQuoteService
             'total' => $pricing['total'],
             'estimated_days_min' => $method->estimated_days_min,
             'estimated_days_max' => $method->estimated_days_max,
+            'total_weight_grams' => max(0, $weightGrams),
+            'weight_surcharge' => round(max(0, $weightSurcharge), 2),
         ];
     }
 
-    private function supports(ShippingMethod $method, ?Address $address): bool
+    private function supports(ShippingMethod $method, ?Address $address, int $weightGrams): bool
     {
+        if ($method->max_weight_grams !== null && $weightGrams > (int) $method->max_weight_grams) {
+            return false;
+        }
+
         if (! $address) {
             return empty($method->state_ids) && empty($method->city_ids);
         }

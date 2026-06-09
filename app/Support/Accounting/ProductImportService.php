@@ -3,15 +3,21 @@
 namespace App\Support\Accounting;
 
 use App\Models\AccountingProductMapping;
+use App\Models\PriceHistory;
 use App\Models\Product;
 use App\Models\User;
 use App\Support\Accounting\Contracts\AccountingProviderInterface;
+use App\Support\Inventory\InventoryService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use RuntimeException;
 
 class ProductImportService
 {
+    public function __construct(
+        private readonly InventoryService $inventoryService
+    ) {}
+
     /**
      * @return array{received:int,created:int,updated:int,unchanged:int,pages:int}
      */
@@ -77,21 +83,47 @@ class ProductImportService
                 $product = new Product;
                 $product->creator_id = $this->creatorId();
                 $product->slug = $this->uniqueSlug($normalized['name'], $normalized['external_id']);
+                $product->stock = 0;
             }
 
             if ($product->trashed()) {
                 $product->restore();
             }
 
+            if ($product->exists && $product->variants()->where('status', 'active')->exists()) {
+                throw new RuntimeException('Accounting product sync cannot overwrite stock for a product with active variants.');
+            }
+
+            $oldPrice = (float) ($product->price ?? 0);
             $product->fill([
                 'name' => $normalized['name'],
                 'sku' => $normalized['sku'],
-                'stock' => $normalized['stock'],
                 'price' => $normalized['price'],
                 'currency' => $normalized['currency'],
                 'status' => $normalized['status'],
             ]);
             $product->save();
+
+            $this->inventoryService->adjustStock(
+                $product,
+                null,
+                $normalized['stock'],
+                null,
+                'accounting_sync',
+                [
+                    'provider' => $provider,
+                    'external_id' => $normalized['external_id'],
+                ]
+            );
+            if ((float) $product->price !== $oldPrice) {
+                PriceHistory::query()->create([
+                    'product_id' => $product->id,
+                    'old_price' => $created ? null : $oldPrice,
+                    'new_price' => $product->price,
+                    'currency' => $product->currency,
+                    'reason' => 'accounting_sync',
+                ]);
+            }
 
             AccountingProductMapping::query()->updateOrCreate(
                 ['product_id' => $product->id],

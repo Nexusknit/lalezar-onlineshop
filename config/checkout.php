@@ -1,6 +1,8 @@
 <?php
 
 return [
+    'reservation_ttl_minutes' => max(1, (int) env('CHECKOUT_RESERVATION_TTL_MINUTES', 20)),
+
     'shipping' => [
         // Flat shipping fee applied to orders below free_threshold.
         'flat_fee' => (float) env('CHECKOUT_SHIPPING_FLAT_FEE', 0),
